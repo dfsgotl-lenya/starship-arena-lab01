@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="uk">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#050a14" />
+    <title>Starship Arena — Lab 01</title>
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">JavaScript • Lab 01</p>
+          <h1>STARSHIP ARENA</h1>
+        </div>
+        <div class="status-badge" id="status-badge">FIXED 60 Hz</div>
+      </header>
+
+      <section class="game-layout">
+        <div class="game-panel">
+          <div class="canvas-wrap" id="canvas-wrap">
+            <canvas id="game" aria-label="Поле гри Starship Arena"></canvas>
+            <div class="hud hud-top">
+              <span>STEPS/S <strong id="steps">60.0</strong></span>
+              <span>FRAMES/S <strong id="frames">60.0</strong></span>
+              <span>FRAME <strong id="frame-time">0.0 ms</strong></span>
+            </div>
+            <div class="hud hud-bottom">
+              <span>POS <strong id="position">0, 0</strong></span>
+              <span>VEL <strong id="velocity">0, 0</strong></span>
+              <span>DPR <strong id="dpr">1.00</strong></span>
+            </div>
+            <div class="message" id="message" hidden></div>
+          </div>
+          <div class="controls-row">
+            <span><kbd>W</kbd>/<kbd>↑</kbd> thrust</span>
+            <span><kbd>A</kbd>/<kbd>←</kbd> turn left</span>
+            <span><kbd>D</kbd>/<kbd>→</kbd> turn right</span>
+            <span><kbd>R</kbd> reset</span>
+          </div>
+        </div>
+
+        <aside class="lab-panel">
+          <section>
+            <p class="section-label">Lab controls</p>
+            <div class="button-grid">
+              <button id="busy-toggle" class="lab-button">Experiment 1: add 100 ms block</button>
+              <button id="interval-run" class="lab-button">Experiment 2: setInterval / 10 s</button>
+              <button id="variable-toggle" class="lab-button">Experiment 3: variable timestep</button>
+              <button id="reset-experiments" class="lab-button secondary">Reset experiments</button>
+            </div>
+          </section>
+
+          <section class="experiment-card">
+            <p class="section-label">Measurements</p>
+            <dl class="metrics">
+              <div><dt>Busy blocks</dt><dd id="busy-count">0</dd></div>
+              <div><dt>Interval callbacks</dt><dd id="interval-callbacks">0</dd></div>
+              <div><dt>Interval avg FPS</dt><dd id="interval-fps">—</dd></div>
+              <div><dt>Interval jitter</dt><dd id="interval-jitter">—</dd></div>
+              <div><dt>Interval range</dt><dd id="interval-range">—</dd></div>
+              <div><dt>Variable run 5 s</dt><dd id="variable-pos">—</dd></div>
+            </dl>
+          </section>
+
+          <section class="info-card">
+            <p class="section-label">What this demonstrates</p>
+            <p>Simulation advances in exact <strong>1/60 s</strong> steps. Rendering may happen at another refresh rate, so the current frame is interpolated between two simulation states.</p>
+            <p>The input state lives inside a closure: external code gets only <code>isDown()</code> and <code>justPressed()</code>, not the underlying key sets.</p>
+          </section>
+        </aside>
+      </section>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
