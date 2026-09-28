@@ -1,220 +1,132 @@
-# Lab 01 — The Event Loop Is the Game Loop
+# Lab 02 — Objects, Prototypes, and `this`
 
 ## Starship Arena
 
-Індивідуальна лабораторна робота з курсу **JavaScript — Build a Multiplayer Browser Game**.
+Продовження **Lab 01** у тому самому проєкті. Цього разу я переробив ігрові сутності з plain objects у класи, додав `Map`-сховище світу, стрільбу, зіткнення, HP, вибухи, респаун, pickup та homing-компонент. Вимоги Lab 02 включають `Vector2`, `Entity`, один рівень `extends`, `World` поверх `Map`, `Bullet`, `Asteroid`, `Pickup`, `Explosion`, приватне `#hp`, окрему систему circle-circle collisions, фікс `this` та композицію для homing/pickup.
 
-У цій роботі я створив браузерний прототип гри **Starship Arena** на **Vite + vanilla JavaScript + HTML5 Canvas 2D**. Реалізовано керування одним космічним кораблем, фізику його руху та ігровий цикл. Код фізики відокремлений від DOM і рендера, щоб у наступних лабораторних його можна було використати для multiplayer-версії.
+## Що я зробив
 
-## Мета роботи
+### 1. `Vector2` і базова `Entity`
 
-Дослідити роботу JavaScript Event Loop та реалізувати ігровий цикл із фіксованим кроком симуляції.
+`src/sim/vector.js` містить чисті методи `add`, `sub`, `scale`, `length`, `normalize`, `rotate`, `dot` і `static fromAngle`. Вони повертають нові вектори та не мутують аргументи.
 
-У роботі реалізовано:
+`src/sim/entity.js` містить базову `Entity` з `id`, `pos`, `vel`, `radius`, `angle`, `alive`, `kind`, попереднім станом для інтерполяції та приватним статичним лічильником ID.
 
-- `requestAnimationFrame` для рендера;
-- fixed timestep `1/60` с;
-- accumulator та інтерполяцію стану;
-- `createInput()` на основі замикання;
-- чисту функцію `integrate(ship, input, dt)` для фізики;
-- Canvas 2D з урахуванням `devicePixelRatio`;
-- загортання корабля через межі арени;
-- HUD із `STEPS/S`, `FRAMES/S` і тривалістю кадру;
-- три експерименти з навмисним погіршенням роботи циклу.
+### 2. `Ship extends Entity`
 
-## Технології
+Корабель тепер є класом, який наслідує `Entity` на один рівень. У `Ship` є приватне поле `#hp` і публічний `get hp()`.
 
-- JavaScript (ES modules)
-- Vite
-- HTML5 Canvas 2D
-- ESLint
-- Prettier
+Корабель має:
 
-## Що було зроблено
+- рух і поворот з Lab 01;
+- cooldown стрільби;
+- `fire(world)` — створює кулю з носа корабля та передає кулі власну швидкість;
+- shield і rapid-fire стани від pickup.
 
-### 1. Ігровий цикл
+### 3. `World` + `Map`
 
-У `src/loop.js` реалізовано цикл на `requestAnimationFrame`. Час накопичується в `accumulator`, а симуляція виконується кроками однакової довжини:
+`src/sim/world.js` зберігає всі сутності в `Map<id, Entity>`.
+
+Реалізовано:
+
+- `spawn(entity)`;
+- `despawn(id)` через `alive = false`;
+- безпечний sweep мертвих сутностей наприкінці `step()`;
+- `get(id)`;
+- `[Symbol.iterator]` для `for...of world`;
+- `*ofKind(kind)` як генератор;
+- `World.step(dt, context)`.
+
+Таким чином рендер і системи працюють із єдиним сховищем сутностей.
+
+### 4. Кулі та астероїди
+
+`Bullet` має TTL 2.2 секунди та зникає після завершення TTL або виходу за межі арени.
+
+`Asteroid` рухається, обертається та відбивається від меж арени. Частина астероїдів отримує homing-поведінку.
+
+### 5. Колізії та шкода
+
+`src/sim/collision.js` є окремою системою circle-circle collision з наївною складністю `O(n²)`.
+
+Реалізовано взаємодії:
+
+- куля → астероїд: знищення + очки + вибух;
+- куля → корабель: шкода;
+- астероїд → корабель: шкода;
+- корабель → pickup: активація бонусу.
+
+Після смерті корабля створюється вибух, корабель прибирається з `Map`, а через 2 секунди створюється новий корабель у безпечній точці.
+
+### 6. Виправлення `this`
+
+Проблема була продемонстрована окремо в консолі. Якщо забрати метод у змінну:
 
 ```js
-const STEP = 1 / 60;
-
-accumulator += Math.min((now - last) / 1000, 0.25);
-
-while (accumulator >= STEP) {
-  simulate(STEP);
-  accumulator -= STEP;
-}
-
-const alpha = accumulator / STEP;
-render(alpha);
+const detachedFire = ship.fire;
+detachedFire(world);
 ```
 
-Фізика працює з фіксованим `dt = 1/60`, незалежно від частоти оновлення монітора. Для відображення використовується інтерполяція між попереднім і поточним станом.
+метод втрачає receiver, тому `this` більше не вказує на `ship`.
 
-### 2. Обробка клавіатури через closure
-
-У `src/input.js` створено `createInput()`. Натиснуті клавіші зберігаються у внутрішньому `Set`, доступ до якого мають тільки функція та повернені нею методи:
+Для реального обробника клавіатури я використав стрілковий callback:
 
 ```js
-isDown(code)
-justPressed(code)
-endFrame()
+window.addEventListener("keydown", (event) => {
+  if (event.code === "Space" && !event.repeat) {
+    world.playerShip?.fire(world);
+  }
+});
 ```
 
-Таким способом реалізовано приватний стан обробника клавіатури.
+Тут стрілка не створює власного `this`, а ми явно звертаємося до потрібного корабля. Альтернативи з методички: `ship.fire.bind(ship)` або class field `fire = () => { ... }`. Перший створює bound function, другий створює окрему arrow-function для кожного екземпляра; тому в проєкті обрано звичайний prototype method + один arrow callback на listener.
 
-### 3. Фізика корабля
+### 7. Композиція: homing і pickup
 
-У `src/sim/ship.js` реалізовано стан корабля:
+Замість глибокого дерева класів використано композицію.
+
+Homing — це окремий об'єкт-поведінка з `update(owner, world, dt)`. Його можна приєднати як:
+
+```js
+bullet.homing = createHomingBehavior(...);
+asteroid.homing = createHomingBehavior(...);
+```
+
+Тому немає потреби створювати `HomingBullet` і `HomingAsteroid` з окремими гілками спадкування.
+
+Pickup теж не є підкласом корабля: це окрема `Entity` з `kind = "pickup"`, власною поведінкою і методом `collect(ship)`.
+
+**Як виглядала б спадкова версія:**
 
 ```text
-x, y       — координати
-vx, vy     — швидкість
-angle      — кут повороту
-thrust     — стан тяги
+Entity
+├── MovingEntity
+│   ├── Ship
+│   ├── Bullet
+│   └── Asteroid
+│       └── HomingAsteroid
+└── HomingBullet
 ```
 
-Функція `integrate(ship, input, dt)` не залежить від DOM, Canvas чи UI. Вона виконує поворот, прискорення корабля, drag та обмеження максимальної швидкості.
+Але тоді рух, targeting і shooting починають комбінуватися через нові підкласи. У поточній версії поведінки додаються окремо до тих сутностей, яким вони потрібні. Це відповідає вимозі лабораторної про composition over inheritance.
 
-### 4. Арена і wrapping
+## Прототипний експеримент
 
-У `src/sim/arena.js` реалізовано загортання через межі арени. Якщо корабель виходить за одну межу, він з'являється з протилежного боку.
+У DevTools → Console під час запуску виводяться три короткі експерименти:
 
-### 5. Canvas і devicePixelRatio
-
-У `src/render/canvas.js` Canvas налаштовується відповідно до `devicePixelRatio`, щоб зображення залишалося чітким на дисплеях із високою щільністю пікселів. Також Canvas перебудовується при зміні розміру вікна.
-
-### 6. Рендер корабля
-
-У `src/render/draw.js` корабель малюється засобами Canvas 2D. Під час рендера використовується `alpha` для інтерполяції між двома станами симуляції.
+1. `Object.create()` показує delegation через prototype.
+2. Від'єднаний `ship.fire` демонструє проблему з `this`.
+3. Порівнюється `object[1]`, `Map.get(1)` і `Map.get("1")`.
 
 ## Керування
 
-- `W` / `ArrowUp` — тяга;
-- `A` / `ArrowLeft` — поворот ліворуч;
-- `D` / `ArrowRight` — поворот праворуч.
+- `W` / `↑` — тяга;
+- `A` / `←` — поворот ліворуч;
+- `D` / `→` — поворот праворуч;
+- `SPACE` — стрільба;
+- `R` — скидання арени.
 
-Корабель може безперервно літати по арені завдяки wrapping.
-
-## Експерименти
-
-### Experiment 1 — блокування 100 ms
-
-У цикл навмисно додано синхронний busy-wait приблизно на 100 ms.
-
-Результат:
-
-- виникають затримки кадрів;
-- `FRAME` збільшується;
-- `FRAMES/S` зменшується;
-- JavaScript на основному потоці не може виконати інший код, поки блокуючий цикл не завершиться.
-
-**Мої вимірювання:**
-
-| Показник | Результат |
-|---|---:|
-| frame-time під час блокування | 0.01 ms |
-| frames/s під час тесту | 129 fps |
-| кількість блокувань за 10 s | 24 |
-
-### Experiment 2 — setInterval замість rAF
-
-Для порівняння використано:
-
-```js
-setInterval(frame, 16);
-```
-
-Зібрано показники частоти кадрів та нерівномірності інтервалів.
-
-**Мої вимірювання:**
-
-| Показник | Результат |
-|---|---:|
-| `setInterval` FPS за 10 s | 62.5 fps |
-| jitter σ | 1.32 ms |
-| мінімальний інтервал | 10.90 ms |
-| максимальний інтервал | 20.70 ms |
-
-### Experiment 3 — variable timestep
-
-Порівняно два режими симуляції: variable timestep та fixed timestep `1/60`.
-
-Тест виконано без throttling і з CPU throttling `6×`.
-
-**Мої вимірювання координат після 5 s thrust:**
-
-| Режим | Без throttling | CPU 6× |
-|---|---:|---:|
-| Variable dt | 52, 350 | 45, 350 |
-| Fixed `1/60` s | 77, 350 | 921, 350 |
-
-Експеримент показує, що при variable timestep результат залежить від фактичного часу між кадрами, а fixed timestep відокремлює фізику від частоти рендера.
-
-## Event Loop
-
-Під час виконання роботи я дослідив взаємодію:
-
-```text
-JavaScript code
-    ↓
-Call Stack
-    ↓
-Tasks / Microtasks
-    ↓
-requestAnimationFrame
-    ↓
-Render / Paint
-```
-
-Це дозволило перевірити, чому блокуючий JavaScript зупиняє оновлення сторінки та чому `requestAnimationFrame` зручно використовувати для анімації.
-
-Приклад порядку виконання:
-
-```js
-console.log("1");
-
-setTimeout(() => console.log("2"), 0);
-
-Promise.resolve().then(() => console.log("3"));
-
-console.log("4");
-```
-
-Результат:
-
-```text
-1
-4
-3
-2
-```
-
-## Структура проєкту
-
-```text
-starship-arena-lab01/
-├── index.html
-├── package.json
-├── eslint.config.js
-├── .prettierrc.json
-├── .nvmrc
-├── README.md
-├── DEFENSE.md
-└── src/
-    ├── main.js
-    ├── loop.js
-    ├── input.js
-    ├── experiments/
-    │   └── experiments.js
-    ├── sim/
-    │   ├── ship.js
-    │   └── arena.js
-    └── render/
-        ├── canvas.js
-        └── draw.js
-```
+Під час гри потрібно знищувати астероїди, збирати `SHIELD` та `RAPID`, а також перевіряти homing-об'єкти.
 
 ## Запуск
 
@@ -231,8 +143,30 @@ npm run format:check
 npm run build
 ```
 
+## Структура
+
+```text
+src/
+├── main.js
+├── input.js
+├── loop.js
+├── sim/
+│   ├── vector.js
+│   ├── entity.js
+│   ├── ship.js
+│   ├── bullet.js
+│   ├── asteroid.js
+│   ├── pickup.js
+│   ├── explosion.js
+│   ├── homing.js
+│   ├── collision.js
+│   ├── world.js
+│   └── arena.js
+└── render/
+    ├── canvas.js
+    └── draw.js
+```
+
 ## Висновок
 
-У роботі я реалізував базовий ігровий цикл для браузерної гри та дослідив особливості виконання JavaScript через Event Loop. Було реалізовано fixed timestep, `requestAnimationFrame`, інтерполяцію, closure-based input, чисту фізику корабля, Canvas 2D та wrapping арени.
-
-Три експерименти дозволили на практиці перевірити вплив блокуючого коду, `setInterval` і variable timestep на роботу гри.
+У Lab 02 я перейшов від одного plain-object корабля до моделі сутностей на класах та прототипах. `World` керує сутностями через `Map`, фізика і колізії відокремлені від рендера, а `this`-проблему для `fire()` виправлено через arrow callback. Homing і pickup реалізовані композицією, щоб не будувати глибоку ієрархію класів.

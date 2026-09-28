@@ -1,39 +1,72 @@
-# Захист Lab 01 — 5 хвилин
+# Lab 02 — короткий план захисту
 
-## 0:00–0:40 — Що зроблено
+## 1. Що зроблено
 
-«Моя тема — Starship Arena. Я зробив керований космічний корабель на Canvas. Архітектура розділена на `loop.js`, `input.js`, `sim/`, `render/` та `experiments/`. Це ES modules, а фізика не має залежностей від DOM.»
+У Lab 02 plain-object корабель із Lab 01 перероблено на `class Ship extends Entity`. Додано `Vector2`, `World` на базі `Map`, кулі, астероїди, pickup, вибухи, колізії, HP, score та respawn.
 
-## 0:40–1:30 — Fixed timestep
+## 2. `this`
 
-«`requestAnimationFrame` запускає render перед paint. Я додаю elapsed time в accumulator, а потім роблю стільки кроків `1/60`, скільки накопичилося. Тому на 60 і 120 Hz кількість simulation steps за секунду залишається близько 60. `alpha` використовується для інтерполяції між `previous` і `current`. Delta обмежений 250 ms, щоб після великого зависання не виникало spiral of death.»
+Показати в консолі:
 
-## 1:30–2:20 — Input + фізика
+```js
+const detachedFire = ship.fire;
+detachedFire(world);
+```
 
-«`createInput()` — замикання. Set натиснутих клавіш закритий усередині функції. Зовнішній код отримує `isDown` і `justPressed`. `integrate(ship, input, dt)` працює тільки зі state, input та dt: поворот, thrust, drag і speed clamp. Після інтегрування корабель wrap-иться через межі арени.»
+Це втрата receiver: у від'єднаного виклику `this` не є кораблем.
 
-## 2:20–3:00 — Canvas + interpolation
+У грі виправлення:
 
-«Canvas збільшується на `devicePixelRatio`, але малювання працює в CSS-пікселях через transform. При resize canvas налаштовується повторно. Корабель малюється через `translate` і `rotate`. Для кута я використовую найкоротшу різницю, тому перехід біля 0/360° не стрибає.»
+```js
+window.addEventListener("keydown", (event) => {
+  if (event.code === "Space") {
+    world.playerShip?.fire(world);
+  }
+});
+```
 
-## 3:00–4:10 — Три експерименти
+Тут `fire()` викликається як метод саме об'єкта `world.playerShip`.
 
-1. **100 ms busy-wait.** «Синхронний `while` блокує main thread. Поки callback не завершився, наступні JavaScript callbacks та rendering step не виконуються.»
+Альтернативи: `bind` або class field arrow function. Для спільного prototype method використано окремий arrow callback у listener.
 
-2. **setInterval(16).** «Timer не синхронізований з paint, тому має jitter/drift. Я вимірюю FPS та стандартне відхилення інтервалу за 10 секунд і перевіряю background tab.»
+## 3. Чотири правила `this`
 
-3. **Variable dt.** «У variable mode physics оновлюється один раз на кадр з реальним `dt`. При CPU throttling частота кадрів змінюється, отже змінюється й траєкторія. Fixed step прибирає залежність simulation від refresh rate.»
+Порядок для цього курсу:
 
-## 4:10–5:00 — Типові питання
+1. `new` binding;
+2. explicit binding (`call/apply/bind`);
+3. implicit binding (`obj.method()`);
+4. default binding (`method()`; у strict mode — `undefined`).
 
-**Чому Promise `.then()` виконується перед `setTimeout(..., 0)`?**
+Arrow functions не мають власного `this` і беруть його лексично із зовнішнього scope.
 
-«`.then()` додається в microtask queue, а timer — у task queue. Після синхронного коду microtasks очищуються раніше за наступну task.»
+## 4. Чому `Map`
 
-**Що таке `alpha`?**
+`World` зберігає `Map<id, Entity>` тому що:
 
-«Це частка залишкового часу accumulator від одного fixed step: `alpha = accumulator / step`. Renderer змішує попередній і поточний state.»
+- ключі залишаються числами;
+- є `size`;
+- є явні `set/get/delete` та insertion order;
+- немає проблеми з успадкованими властивостями звичайного object dictionary.
 
-**Чому це важливо для multiplayer?**
+## 5. Чому композиція
 
-«Однаковий input + однакові fixed steps дають відтворювану simulation. Це основа для подальшого authoritative server і reconciliation.»
+Одна і та сама homing-поведінка може бути приєднана і до `Bullet`, і до `Asteroid`:
+
+```js
+entity.homing = createHomingBehavior(...);
+```
+
+Pickup взагалі не повинен бути `Ship` або `MovingEntity`: він є окремою сутністю з колайдером і методом `collect`.
+
+Глибоке дерево `Entity -> Moving -> Homing -> ...` швидко стає незручним, тому поведінки зберігаються як окремі компоненти.
+
+## 6. Що показати під час демо
+
+1. Рух корабля.
+2. SPACE — стрільба.
+3. Попадання кулі в астероїд — очки та вибух.
+4. `SHIELD` та `RAPID` pickup.
+5. Homing-куля та homing-астероїд.
+6. Отримання шкоди, смерть і респаун через 2 секунди.
+7. DevTools → Console — prototype та detached `this` експеримент.

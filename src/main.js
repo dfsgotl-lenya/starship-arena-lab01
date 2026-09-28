@@ -1,40 +1,28 @@
 import "./style.css";
 import { createInput } from "./input.js";
-import { createLoop, createVariableLoop } from "./loop.js";
-import { createShip, cloneShip, integrate } from "./sim/ship.js";
-import { wrapShipToArena } from "./sim/arena.js";
+import { createLoop } from "./loop.js";
 import { setupCanvas } from "./render/canvas.js";
-import {
-  drawArenaFrame,
-  drawBackground,
-  drawHud,
-  drawShip,
-  interpolateShip,
-} from "./render/draw.js";
-import { busyWait, createIntervalExperiment } from "./experiments/experiments.js";
+import { drawArenaFrame, drawBackground, drawHud, drawWorld } from "./render/draw.js";
+import { World } from "./sim/world.js";
+import { Ship } from "./sim/ship.js";
 
 const canvas = document.querySelector("#game");
 const canvasWrap = document.querySelector("#canvas-wrap");
-const input = createInput(window);
 const message = document.querySelector("#message");
 const statusBadge = document.querySelector("#status-badge");
+const input = createInput(window);
 
 const dom = {
   steps: document.querySelector("#steps"),
   frames: document.querySelector("#frames"),
   frameTime: document.querySelector("#frame-time"),
-  position: document.querySelector("#position"),
-  velocity: document.querySelector("#velocity"),
-  dpr: document.querySelector("#dpr"),
-  busyCount: document.querySelector("#busy-count"),
-  intervalFps: document.querySelector("#interval-fps"),
-  intervalJitter: document.querySelector("#interval-jitter"),
-  intervalRange: document.querySelector("#interval-range"),
-  intervalCallbacks: document.querySelector("#interval-callbacks"),
-  variablePos: document.querySelector("#variable-pos"),
+  hp: document.querySelector("#hp"),
+  score: document.querySelector("#score"),
+  entities: document.querySelector("#entities"),
+  activePower: document.querySelector("#active-power"),
 };
 
-const stars = Array.from({ length: 110 }, (_, index) => ({
+const stars = Array.from({ length: 120 }, (_, index) => ({
   x: ((index * 73) % 997) / 997,
   y: ((index * 151) % 991) / 991,
   size: index % 7 === 0 ? 2 : 1,
@@ -42,161 +30,103 @@ const stars = Array.from({ length: 110 }, (_, index) => ({
   phase: index * 0.37,
 }));
 
-const canvasApi = setupCanvas(canvas);
-let ship = createShip(320, 240);
-let previousShip = cloneShip(ship);
-let simulationTime = 0;
-let busyExperiment = false;
-let busyCount = 0;
-let variableTimestep = false;
-let activeLoop = null;
+let world;
 
-const intervalExperiment = createIntervalExperiment({
-  onProgress: ({ count, elapsed, durationMs }) => {
-    message.hidden = false;
-    const seconds = Math.min(elapsed, durationMs) / 1000;
-    message.textContent = `setInterval test: ${count} callbacks / ${seconds.toFixed(1)} s...`;
-  },
-  onComplete: (result) => {
-    dom.intervalFps.textContent = `${result.fps.toFixed(1)} fps`;
-    dom.intervalJitter.textContent = `${result.jitterMs.toFixed(2)} ms`;
-    dom.intervalRange.textContent = `${result.minMs.toFixed(2)}–${result.maxMs.toFixed(2)} ms`;
-    dom.intervalCallbacks.textContent = String(result.callbacks);
-    message.hidden = false;
-    message.textContent =
-      `Experiment 2 complete: ${result.callbacks} callbacks in ` +
-      `${(result.elapsedMs / 1000).toFixed(2)} s.`;
-    document.querySelector("#interval-run").disabled = false;
-    setStatus("FIXED 60 Hz");
-  },
-});
-
-function resetShip() {
-  const { width, height } = canvasApi.size;
-  ship = createShip(width / 2, height / 2);
-  previousShip = cloneShip(ship);
-  simulationTime = 0;
-}
-
-function simulate(step) {
-  previousShip = cloneShip(ship);
-  ship = integrate(ship, input, step);
-  ship = wrapShipToArena(ship, canvasApi.size.width, canvasApi.size.height);
-  simulationTime += step;
-}
-
-function render(alpha, stats) {
-  const { ctx, size } = canvasApi;
-  const interpolated = interpolateShip(previousShip, ship, alpha);
-
-  drawBackground(ctx, size.width, size.height, simulationTime, stars);
-  drawArenaFrame(ctx, size.width, size.height);
-  drawShip(ctx, interpolated);
-  drawHud(dom, stats, interpolated, size.dpr);
-
-  if (busyExperiment && Math.round(stats.totalFrames ?? 0) % 60 === 0) {
-    busyWait(100);
-    busyCount += 1;
-    dom.busyCount.textContent = String(busyCount);
-  }
-
-  input.endFrame();
-}
-
-const fixedLoop = createLoop({
-  step: 1 / 60,
-  simulate,
-  render,
-});
-
-const variableLoop = createVariableLoop({
-  simulate,
-  render,
-});
-
-function useFixedLoop() {
-  variableLoop.stop();
-  fixedLoop.start();
-  activeLoop = fixedLoop;
-}
-
-function useVariableLoop() {
-  fixedLoop.stop();
-  variableLoop.start();
-  activeLoop = variableLoop;
-}
-
-function setStatus(text) {
-  statusBadge.textContent = text;
-}
-
-document.querySelector("#busy-toggle").addEventListener("click", (event) => {
-  busyExperiment = !busyExperiment;
-  event.currentTarget.classList.toggle("active", busyExperiment);
-  message.hidden = false;
-  message.textContent = busyExperiment
-    ? "Experiment 1 ON: 100 ms synchronous block every 60th frame."
-    : "Experiment 1 OFF: normal rAF loop restored.";
-  setStatus(busyExperiment ? "EXPERIMENT 1" : "FIXED 60 Hz");
-});
-
-document.querySelector("#interval-run").addEventListener("click", (event) => {
-  event.currentTarget.disabled = true;
-  dom.intervalFps.textContent = "running…";
-  dom.intervalJitter.textContent = "running…";
-  dom.intervalRange.textContent = "running…";
-  dom.intervalCallbacks.textContent = "0";
-  message.hidden = false;
-  message.textContent = "Experiment 2 running for 10 s. Switch to another tab for ~5 s, then return.";
-  setStatus("EXPERIMENT 2");
-  intervalExperiment.start(10_000);
-});
-
-document.querySelector("#variable-toggle").addEventListener("click", (event) => {
-  variableTimestep = !variableTimestep;
-  event.currentTarget.classList.toggle("active", variableTimestep);
-  setStatus(variableTimestep ? "VARIABLE DT" : "FIXED 60 Hz");
-  message.hidden = false;
-  message.textContent = variableTimestep
-    ? "Variable timestep mode ON. Hold W/↑ for 5 s, then record POS; repeat with CPU 6×."
-    : "Fixed timestep restored.";
-
-  if (variableTimestep) {
-    useVariableLoop();
-  } else {
-    useFixedLoop();
+const canvasApi = setupCanvas(canvas, ({ width, height }) => {
+  if (world) {
+    world.width = width;
+    world.height = height;
   }
 });
 
-document.querySelector("#reset-experiments").addEventListener("click", (event) => {
-  busyExperiment = false;
-  variableTimestep = false;
-  busyCount = 0;
-  dom.busyCount.textContent = "0";
-  dom.intervalFps.textContent = "—";
-  dom.intervalJitter.textContent = "—";
-  dom.intervalRange.textContent = "—";
-  dom.intervalCallbacks.textContent = "0";
-  dom.variablePos.textContent = "—";
-  intervalExperiment.stop();
-  useFixedLoop();
-  document.querySelectorAll(".lab-button.active").forEach((button) => button.classList.remove("active"));
-  event.currentTarget.blur();
-  message.hidden = true;
-  setStatus("FIXED 60 Hz");
-  resetShip();
+world = new World({
+  width: canvasApi.size.width,
+  height: canvasApi.size.height,
+  onScore: (score) => {
+    dom.score.textContent = String(score);
+  },
 });
+
+function setMessage(text) {
+  message.hidden = false;
+  message.textContent = text;
+  window.clearTimeout(setMessage.timer);
+  setMessage.timer = window.setTimeout(() => {
+    message.hidden = true;
+  }, 2500);
+}
+
+function resetWorld() {
+  world.reset();
+  world.width = canvasApi.size.width;
+  world.height = canvasApi.size.height;
+  world.seed();
+  const ship = new Ship(world.width / 2, world.height / 2);
+  world.spawn(ship);
+  setMessage("Lab 02 ready: fly, shoot, collect pickups and destroy asteroids.");
+}
+
+resetWorld();
+
+// Required console experiment: prototypes + detached this.
+function runConsoleExperiments() {
+  const proto = { hello() { return "hello from prototype"; } };
+  const a = Object.create(proto);
+  const b = Object.create(proto);
+  a.hello = () => "hello from a";
+  window.console.log("[Lab 02] Prototype delegation:", { a: a.hello(), b: b.hello(), shared: Object.getPrototypeOf(b) === proto });
+
+  const demoShip = new Ship(0, 0);
+  const detachedFire = demoShip.fire;
+  try {
+    detachedFire(world);
+  } catch (error) {
+    window.console.log("[Lab 02] Deliberate this bug:", error.message);
+  }
+  window.console.log("[Lab 02] Fixed keyboard handler: () => world.playerShip?.fire(world)");
+
+  const objectDict = { "1": "x" };
+  const map = new Map([[1, "x"]]);
+  window.console.log("[Lab 02] Object vs Map keys:", { object1: objectDict[1], map1: map.get(1), mapString1: map.get("1") });
+}
+runConsoleExperiments();
 
 window.addEventListener("keydown", (event) => {
-  if (input.justPressed("KeyR")) resetShip();
+  if (event.code === "Space" && !event.repeat) {
+    // Chosen fix for the `this` bug: arrow callback keeps the correct receiver.
+    const bullet = world.playerShip?.fire(world);
+    if (bullet) statusBadge.textContent = bullet.homing ? "HOMING FIRE" : "FIRE";
+  }
+
+  if (event.code === "KeyR" && input.justPressed("KeyR")) resetWorld();
 });
 
 canvasWrap.addEventListener("click", () => canvas.focus());
+
+const loop = createLoop({
+  step: 1 / 60,
+  simulate(dt) {
+    world.step(dt, { input });
+    world.playerShip &&= world.get(world.playerId);
+  },
+  render(alpha, stats) {
+    const { ctx, size } = canvasApi;
+    drawBackground(ctx, size.width, size.height, world.time, stars);
+    drawArenaFrame(ctx, size.width, size.height);
+    drawWorld(ctx, world, alpha);
+    drawHud(dom, stats, world);
+    input.endFrame();
+  },
+});
+
+loop.start();
+
+// Small composition demo: the same homing behavior is used by bullets and asteroids.
+window.console.log("[Lab 02] Composition:", "Bullet.homing and Asteroid.homing are independent behavior components.");
+window.console.log("[Lab 02] World entities:", "Map", "ofKind()", "iterable", "deferred sweep");
+
 window.addEventListener("beforeunload", () => {
-  activeLoop?.stop();
-  intervalExperiment.stop();
+  loop.stop();
   input.destroy();
   canvasApi.destroy();
 });
-
-useFixedLoop();
