@@ -1,220 +1,23 @@
-# Lab 01 — The Event Loop Is the Game Loop
+# Lab 03 — Asynchronous JavaScript
 
 ## Starship Arena
 
-Індивідуальна лабораторна робота з курсу **JavaScript — Build a Multiplayer Browser Game**.
-
-У цій роботі я створив браузерний прототип гри **Starship Arena** на **Vite + vanilla JavaScript + HTML5 Canvas 2D**. Реалізовано керування одним космічним кораблем, фізику його руху та ігровий цикл. Код фізики відокремлений від DOM і рендера, щоб у наступних лабораторних його можна було використати для multiplayer-версії.
-
-## Мета роботи
-
-Дослідити роботу JavaScript Event Loop та реалізувати ігровий цикл із фіксованим кроком симуляції.
-
-У роботі реалізовано:
-
-- `requestAnimationFrame` для рендера;
-- fixed timestep `1/60` с;
-- accumulator та інтерполяцію стану;
-- `createInput()` на основі замикання;
-- чисту функцію `integrate(ship, input, dt)` для фізики;
-- Canvas 2D з урахуванням `devicePixelRatio`;
-- загортання корабля через межі арени;
-- HUD із `STEPS/S`, `FRAMES/S` і тривалістю кадру;
-- три експерименти з навмисним погіршенням роботи циклу.
-
-## Технології
-
-- JavaScript (ES modules)
-- Vite
-- HTML5 Canvas 2D
-- ESLint
-- Prettier
-
-## Що було зроблено
-
-### 1. Ігровий цикл
-
-У `src/loop.js` реалізовано цикл на `requestAnimationFrame`. Час накопичується в `accumulator`, а симуляція виконується кроками однакової довжини:
-
-```js
-const STEP = 1 / 60;
-
-accumulator += Math.min((now - last) / 1000, 0.25);
-
-while (accumulator >= STEP) {
-  simulate(STEP);
-  accumulator -= STEP;
-}
-
-const alpha = accumulator / STEP;
-render(alpha);
-```
-
-Фізика працює з фіксованим `dt = 1/60`, незалежно від частоти оновлення монітора. Для відображення використовується інтерполяція між попереднім і поточним станом.
-
-### 2. Обробка клавіатури через closure
-
-У `src/input.js` створено `createInput()`. Натиснуті клавіші зберігаються у внутрішньому `Set`, доступ до якого мають тільки функція та повернені нею методи:
-
-```js
-isDown(code)
-justPressed(code)
-endFrame()
-```
-
-Таким способом реалізовано приватний стан обробника клавіатури.
-
-### 3. Фізика корабля
-
-У `src/sim/ship.js` реалізовано стан корабля:
-
-```text
-x, y       — координати
-vx, vy     — швидкість
-angle      — кут повороту
-thrust     — стан тяги
-```
-
-Функція `integrate(ship, input, dt)` не залежить від DOM, Canvas чи UI. Вона виконує поворот, прискорення корабля, drag та обмеження максимальної швидкості.
-
-### 4. Арена і wrapping
-
-У `src/sim/arena.js` реалізовано загортання через межі арени. Якщо корабель виходить за одну межу, він з'являється з протилежного боку.
-
-### 5. Canvas і devicePixelRatio
-
-У `src/render/canvas.js` Canvas налаштовується відповідно до `devicePixelRatio`, щоб зображення залишалося чітким на дисплеях із високою щільністю пікселів. Також Canvas перебудовується при зміні розміру вікна.
-
-### 6. Рендер корабля
-
-У `src/render/draw.js` корабель малюється засобами Canvas 2D. Під час рендера використовується `alpha` для інтерполяції між двома станами симуляції.
-
-## Керування
-
-- `W` / `ArrowUp` — тяга;
-- `A` / `ArrowLeft` — поворот ліворуч;
-- `D` / `ArrowRight` — поворот праворуч.
-
-Корабель може безперервно літати по арені завдяки wrapping.
-
-## Експерименти
-
-### Experiment 1 — блокування 100 ms
-
-У цикл навмисно додано синхронний busy-wait приблизно на 100 ms.
-
-Результат:
-
-- виникають затримки кадрів;
-- `FRAME` збільшується;
-- `FRAMES/S` зменшується;
-- JavaScript на основному потоці не може виконати інший код, поки блокуючий цикл не завершиться.
-
-**Мої вимірювання:**
-
-| Показник | Результат |
-|---|---:|
-| frame-time під час блокування | 0.01 ms |
-| frames/s під час тесту | 129 fps |
-| кількість блокувань за 10 s | 24 |
-
-### Experiment 2 — setInterval замість rAF
-
-Для порівняння використано:
-
-```js
-setInterval(frame, 16);
-```
-
-Зібрано показники частоти кадрів та нерівномірності інтервалів.
-
-**Мої вимірювання:**
-
-| Показник | Результат |
-|---|---:|
-| `setInterval` FPS за 10 s | 62.5 fps |
-| jitter σ | 1.32 ms |
-| мінімальний інтервал | 10.90 ms |
-| максимальний інтервал | 20.70 ms |
-
-### Experiment 3 — variable timestep
-
-Порівняно два режими симуляції: variable timestep та fixed timestep `1/60`.
-
-Тест виконано без throttling і з CPU throttling `6×`.
-
-**Мої вимірювання координат після 5 s thrust:**
-
-| Режим | Без throttling | CPU 6× |
-|---|---:|---:|
-| Variable dt | 52, 350 | 45, 350 |
-| Fixed `1/60` s | 77, 350 | 921, 350 |
-
-Експеримент показує, що при variable timestep результат залежить від фактичного часу між кадрами, а fixed timestep відокремлює фізику від частоти рендера.
-
-## Event Loop
-
-Під час виконання роботи я дослідив взаємодію:
-
-```text
-JavaScript code
-    ↓
-Call Stack
-    ↓
-Tasks / Microtasks
-    ↓
-requestAnimationFrame
-    ↓
-Render / Paint
-```
-
-Це дозволило перевірити, чому блокуючий JavaScript зупиняє оновлення сторінки та чому `requestAnimationFrame` зручно використовувати для анімації.
-
-Приклад порядку виконання:
-
-```js
-console.log("1");
-
-setTimeout(() => console.log("2"), 0);
-
-Promise.resolve().then(() => console.log("3"));
-
-console.log("4");
-```
-
-Результат:
-
-```text
-1
-4
-3
-2
-```
-
-## Структура проєкту
-
-```text
-starship-arena-lab01/
-├── index.html
-├── package.json
-├── eslint.config.js
-├── .prettierrc.json
-├── .nvmrc
-├── README.md
-├── DEFENSE.md
-└── src/
-    ├── main.js
-    ├── loop.js
-    ├── input.js
-    ├── experiments/
-    │   └── experiments.js
-    ├── sim/
-    │   ├── ship.js
-    │   └── arena.js
-    └── render/
-        ├── canvas.js
-        └── draw.js
-```
+Продовження **Lab 01–02** у тому самому репозиторії. У цій лабораторній я додав асинхронний pipeline завантаження ресурсів, екран прогресу, lobby через HTTP, Web Audio та діагностику помилок.
+
+## Що реалізовано
+
+- `manifest.json` описує sprite sheets, звуки та arena config.
+- `loadImage`, `loadAudio`, `loadJson` приймають `AbortSignal`.
+- Спільний `fetchJson()` перевіряє `response.ok` і перетворює HTTP-помилки на rejected Promise.
+- `withRetry()` використовує exponential backoff + jitter і **не повторює 4xx**.
+- `loadAll()` завантажує ресурси конкурентно через `Promise.all()` та показує прогрес кожного файлу.
+- Гра переходить до lobby лише після `await loadAll(...)`.
+- Корабель, кулі та астероїди малюються зі sprite sheets.
+- Звуки декодуються під час loading; Web Audio `AudioContext` створюється/розблоковується після жесту гравця.
+- Симуляція не імпортує `audio.js` або `hud.js`: події проходять через `EventTarget` + `CustomEvent` (`fired`, `hit`, `exploded`, `scoreChanged`).
+- `class Lobby extends EventTarget` отримує `/api/rooms`, оновлює список через async iteration, використовує `AbortSignal.timeout()` для кожного запиту й скасовує polling після Join/Stop.
+- Після Join локальна гра стартує з конфігом вибраної кімнати.
+- У lobby є діагностика 404, timeout, abort, corrupt JSON, retry після 5xx та benchmark sequential/concurrent.
 
 ## Запуск
 
@@ -231,8 +34,158 @@ npm run format:check
 npm run build
 ```
 
+## Структура
+
+```text
+starship-arena-lab01/
+├── public/
+│   ├── api/rooms.json
+│   └── assets/
+│       ├── manifest.json
+│       ├── arena.json
+│       ├── sprites/
+│       └── audio/
+├── src/
+│   ├── assets/loader.js
+│   ├── async/puzzles.js
+│   ├── audio.js
+│   ├── diagnostics.js
+│   ├── hud.js
+│   ├── lobby/lobby.js
+│   ├── lobby/dom.js
+│   ├── sim/
+│   └── render/
+└── vite.config.js
+```
+
+## Sequential vs concurrent
+
+Для контрольованого тесту використано чотири `/api/slow?ms=320` запити.
+
+Очікувана різниця: при sequential `await` запити виконуються один за одним, тому час близький до суми всіх затримок; при `Promise.all` запити стартують разом, тому час близький до найдовшого одного запиту.
+
+**Моє вимірювання:**
+
+| Метод | Час |
+|---|---:|
+| Sequential | ___ ms |
+| Concurrent (`Promise.all`) | ___ ms |
+
+## П'ять puzzle на порядок microtask/task
+
+### 1. Promise reaction
+
+```js
+console.log("A");
+Promise.resolve().then(() => console.log("B"));
+console.log("C");
+```
+
+Вивід: `A, C, B`.
+
+Пояснення: `.then()` планує реакцію як microtask, тому вона виконується після синхронного коду поточного task.
+
+### 2. `await`
+
+```js
+(async () => {
+  console.log("A");
+  await 0;
+  console.log("B");
+})();
+console.log("C");
+```
+
+Вивід: `A, C, B`.
+
+Пояснення: `await` призупиняє async-функцію, а продовження виконується пізніше як microtask.
+
+### 3. `setTimeout` всередині `.then()`
+
+```js
+Promise.resolve()
+  .then(() => {
+    console.log("A");
+    setTimeout(() => console.log("D"), 0);
+  })
+  .then(() => console.log("B"));
+console.log("C");
+```
+
+Вивід: `C, A, B, D`.
+
+Пояснення: обидві Promise-реакції завершуються як microtasks раніше, ніж timer стає наступним task.
+
+### 4. `requestAnimationFrame`
+
+```js
+requestAnimationFrame(() => console.log("rAF"));
+Promise.resolve().then(() => console.log("micro"));
+console.log("sync");
+```
+
+Вивід: `sync, micro, rAF`.
+
+Пояснення: поточний синхронний код завершується, потім очищуються microtasks, після чого браузер доходить до rendering opportunity.
+
+### 5. Два `await`
+
+```js
+Promise.resolve().then(async () => {
+  console.log("A");
+  await Promise.resolve();
+  console.log("B");
+  await 0;
+  console.log("C");
+});
+console.log("D");
+```
+
+Вивід: `D, A, B, C`.
+
+Пояснення: кожен `await` віддає керування event loop і продовжує async-функцію в наступному microtask.
+
+Під час запуску `puzzles.js` ці приклади також друкуються в DevTools Console.
+
+## Галерея збоїв
+
+У правій панелі **Async diagnostics** є окремі кнопки. Після натискання кожна помилка перехоплюється, тому гра не падає.
+
+| Сценарій | Що перевіряється | Результат |
+|---|---|---|
+| 404 sprite | `response.ok === false`, 4xx без retry | ___ |
+| network timeout | `AbortSignal.timeout(500)` | ___ |
+| abort mid-load | `AbortController.abort()` | ___ |
+| corrupt JSON | відхилення `response.json()` | ___ |
+| retry 5xx | exponential backoff + jitter | ___ |
+
+**Скріншоти/логи:** вставити тут 1–2 скріншоти панелі діагностики після проходження тестів.
+
+## Promise combinators
+
+У консолі також демонструються:
+
+- `Promise.all()` — одночасне завантаження asset pipeline;
+- `Promise.allSettled()` — перегляд усіх результатів навіть при частковій помилці;
+- `Promise.race()` — отримати перший результат;
+- `Promise.any()` — отримати перший успішний результат.
+
+## EventTarget та Web Audio
+
+`World` лише генерує події:
+
+```text
+fired
+hit
+exploded
+scoreChanged
+respawned
+```
+
+`audio.js` слухає їх та програє попередньо декодовані буфери. `hud.js` отримує зміни через подієву шину. Таким чином симуляція не має залежності від audio/HUD модулів.
+
+AudioContext розблоковується після натискання **Join**, а звукові буфери готуються під час loading через `OfflineAudioContext`.
+
 ## Висновок
 
-У роботі я реалізував базовий ігровий цикл для браузерної гри та дослідив особливості виконання JavaScript через Event Loop. Було реалізовано fixed timestep, `requestAnimationFrame`, інтерполяцію, closure-based input, чисту фізику корабля, Canvas 2D та wrapping арени.
-
-Три експерименти дозволили на практиці перевірити вплив блокуючого коду, `setInterval` і variable timestep на роботу гри.
+У Lab 03 я перевів завантаження ресурсів і lobby на Promise-based API без блокування main thread. Concurrent asset loading скорочує час очікування, `AbortSignal` дозволяє скасовувати запити, а `EventTarget` відокремлює симуляцію від UI та звуку. Окремі діагностичні тести показують, що 404, timeout, abort і битий JSON обробляються без падіння гри.

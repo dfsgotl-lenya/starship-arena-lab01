@@ -1,39 +1,41 @@
-# Захист Lab 01 — 5 хвилин
+# Lab 03 — короткий захист
 
-## 0:00–0:40 — Що зроблено
+## 1. Що показати
 
-«Моя тема — Starship Arena. Я зробив керований космічний корабель на Canvas. Архітектура розділена на `loop.js`, `input.js`, `sim/`, `render/` та `experiments/`. Це ES modules, а фізика не має залежностей від DOM.»
+1. Loading screen і реальний progress bar.
+2. Lobby: ім'я → вибір кімнати → Join.
+3. Політ, SPACE → постріл + звук, попадання → hit/explosion.
+4. Async diagnostics: 404, timeout, abort, corrupt JSON, retry 5xx, benchmark.
+5. DevTools Console: п'ять ordering puzzles.
 
-## 0:40–1:30 — Fixed timestep
+## 2. Основна ідея
 
-«`requestAnimationFrame` запускає render перед paint. Я додаю elapsed time в accumulator, а потім роблю стільки кроків `1/60`, скільки накопичилося. Тому на 60 і 120 Hz кількість simulation steps за секунду залишається близько 60. `alpha` використовується для інтерполяції між `previous` і `current`. Delta обмежений 250 ms, щоб після великого зависання не виникало spiral of death.»
+`loadAll()` запускає всі asset-завантаження одночасно та чекає їх через `Promise.all()`. Тому час очікування не дорівнює сумі окремих завантажень.
 
-## 1:30–2:20 — Input + фізика
+`async/await` не блокує JavaScript. На `await` async-функція повертає керування event loop, а продовження запускається після завершення Promise.
 
-«`createInput()` — замикання. Set натиснутих клавіш закритий усередині функції. Зовнішній код отримує `isDown` і `justPressed`. `integrate(ship, input, dt)` працює тільки зі state, input та dt: поворот, thrust, drag і speed clamp. Після інтегрування корабель wrap-иться через межі арени.»
+## 3. Retry
 
-## 2:20–3:00 — Canvas + interpolation
+4xx не повторюються, бо помилка означає проблему в запиті/ресурсі. Тимчасові 5xx та network errors можуть повторюватися через exponential backoff + jitter.
 
-«Canvas збільшується на `devicePixelRatio`, але малювання працює в CSS-пікселях через transform. При resize canvas налаштовується повторно. Корабель малюється через `translate` і `rotate`. Для кута я використовую найкоротшу різницю, тому перехід біля 0/360° не стрибає.»
+## 4. Abort
 
-## 3:00–4:10 — Три експерименти
+`AbortController` скасовує власний довгий запит. `AbortSignal.timeout()` дає окремий дедлайн для HTTP-запиту lobby.
 
-1. **100 ms busy-wait.** «Синхронний `while` блокує main thread. Поки callback не завершився, наступні JavaScript callbacks та rendering step не виконуються.»
+## 5. Чому EventTarget
 
-2. **setInterval(16).** «Timer не синхронізований з paint, тому має jitter/drift. Я вимірюю FPS та стандартне відхилення інтервалу за 10 секунд і перевіряю background tab.»
+Sim не повинен імпортувати audio або HUD. Він генерує події `fired`, `hit`, `exploded`, а окремі модулі підписуються на них.
 
-3. **Variable dt.** «У variable mode physics оновлюється один раз на кадр з реальним `dt`. При CPU throttling частота кадрів змінюється, отже змінюється й траєкторія. Fixed step прибирає залежність simulation від refresh rate.»
+## 6. Що відповісти про lobby
 
-## 4:10–5:00 — Типові питання
+`Lobby extends EventTarget`. `refresh()` робить `fetchJson('/api/rooms')`; кожен запит має `AbortSignal.timeout(...)`. Polling працює тільки поки lobby активне. Після Join викликається `leave()` і controller робить abort.
 
-**Чому Promise `.then()` виконується перед `setTimeout(..., 0)`?**
+## 7. Reflection
 
-«`.then()` додається в microtask queue, а timer — у task queue. Після синхронного коду microtasks очищуються раніше за наступну task.»
+**Promise states:** pending → fulfilled/rejected, перехід відбувається один раз.
 
-**Що таке `alpha`?**
+**async/await:** `await` є синтаксичним способом працювати з Promise; функція продовжується після settlement.
 
-«Це частка залишкового часу accumulator від одного fixed step: `alpha = accumulator / step`. Renderer змішує попередній і поточний state.»
+**all vs allSettled vs race vs any:** `all` — всі assets; `allSettled` — diagnostics; `race` — перший результат; `any` — перший успішний.
 
-**Чому це важливо для multiplayer?**
-
-«Однаковий input + однакові fixed steps дають відтворювану simulation. Це основа для подальшого authoritative server і reconciliation.»
+**fetch + 404:** сам `fetch` зазвичай не reject-иться на HTTP 404, тому треба перевіряти `response.ok`; body читається окремим async-кроком через `json()/blob()/arrayBuffer()`.
