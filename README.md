@@ -68,8 +68,8 @@ starship-arena-lab01/
 
 | Метод | Час |
 |---|---:|
-| Sequential | ___ ms |
-| Concurrent (`Promise.all`) | ___ ms |
+| Sequential | 1289 ms |
+| Concurrent (`Promise.all`) | 325 ms |
 
 ## П'ять puzzle на порядок microtask/task
 
