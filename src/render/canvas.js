@@ -9,7 +9,6 @@ export function setupCanvas(canvas, onResize = () => {}) {
     width = Math.max(1, rect.width);
     height = Math.max(1, rect.height);
     dpr = Math.min(window.devicePixelRatio || 1, 2);
-
     canvas.width = Math.round(width * dpr);
     canvas.height = Math.round(height * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -22,11 +21,7 @@ export function setupCanvas(canvas, onResize = () => {}) {
 
   return {
     ctx,
-    get size() {
-      return { width, height, dpr };
-    },
-    destroy() {
-      observer.disconnect();
-    },
+    get size() { return { width, height, dpr }; },
+    destroy() { observer.disconnect(); },
   };
 }

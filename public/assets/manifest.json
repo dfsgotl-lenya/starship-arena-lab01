@@ -1,0 +1,13 @@
+{
+  "sprites": {
+    "ship": { "url": "/assets/sprites/ship-sheet.png", "frameWidth": 48, "frameHeight": 48, "frames": 4 },
+    "bullet": { "url": "/assets/sprites/bullet-sheet.png", "frameWidth": 24, "frameHeight": 24, "frames": 4 },
+    "asteroid": { "url": "/assets/sprites/asteroid-sheet.png", "frameWidth": 64, "frameHeight": 64, "frames": 4 }
+  },
+  "sounds": {
+    "fired": "/assets/audio/fired.wav",
+    "hit": "/assets/audio/hit.wav",
+    "exploded": "/assets/audio/exploded.wav"
+  },
+  "arena": "/assets/arena.json"
+}

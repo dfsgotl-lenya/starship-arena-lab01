@@ -1,0 +1,9 @@
+{
+  "name": "Training Ring",
+  "width": 1280,
+  "height": 720,
+  "asteroidCount": 9,
+  "homingEvery": 4,
+  "asteroidSpeedMin": 35,
+  "asteroidSpeedMax": 85
+}

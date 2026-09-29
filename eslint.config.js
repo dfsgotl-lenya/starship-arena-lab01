@@ -1,9 +1,7 @@
 import eslint from "@eslint/js";
 
 export default [
-  {
-    ignores: ["dist/**", "node_modules/**"],
-  },
+  { ignores: ["dist/**", "node_modules/**"] },
   eslint.configs.recommended,
   {
     languageOptions: {
@@ -18,8 +16,6 @@ export default [
         ResizeObserver: "readonly",
       },
     },
-    rules: {
-      "no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
-    },
+    rules: { "no-unused-vars": ["error", { "argsIgnorePattern": "^_" }] },
   },
 ];
