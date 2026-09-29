@@ -151,13 +151,13 @@ console.log("D");
 
 У правій панелі **Async diagnostics** є окремі кнопки. Після натискання кожна помилка перехоплюється, тому гра не падає.
 
-| Сценарій | Що перевіряється | Результат |
-|---|---|---|
-| 404 sprite | `response.ok === false`, 4xx без retry | ___ |
-| network timeout | `AbortSignal.timeout(500)` | ___ |
-| abort mid-load | `AbortController.abort()` | ___ |
-| corrupt JSON | відхилення `response.json()` | ___ |
-| retry 5xx | exponential backoff + jitter | ___ |
+| Тест | Результат |
+|---|---|
+| 404 sprite | Помилку оброблено; 4xx не повторювався |
+| Network timeout | Помилку оброблено через `TimeoutError` |
+| Abort mid-load | Завантаження скасовано через `AbortError` |
+| Corrupt JSON | Помилку парсингу оброблено через `SyntaxError` |
+| Retry 5xx | Запит відновлено після 3 спроб |
 
 **Скріншоти/логи:** вставити тут 1–2 скріншоти панелі діагностики після проходження тестів.
 
