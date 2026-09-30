@@ -1,39 +1,48 @@
-# Захист Lab 01 — 5 хвилин
+# Lab 04 — сценарій захисту (5 хв)
 
-## 0:00–0:40 — Що зроблено
+## 1. Показати запуск
 
-«Моя тема — Starship Arena. Я зробив керований космічний корабель на Canvas. Архітектура розділена на `loop.js`, `input.js`, `sim/`, `render/` та `experiments/`. Це ES modules, а фізика не має залежностей від DOM.»
+Термінал 1:
 
-## 0:40–1:30 — Fixed timestep
+```bash
+npm run dev:server
+```
 
-«`requestAnimationFrame` запускає render перед paint. Я додаю elapsed time в accumulator, а потім роблю стільки кроків `1/60`, скільки накопичилося. Тому на 60 і 120 Hz кількість simulation steps за секунду залишається близько 60. `alpha` використовується для інтерполяції між `previous` і `current`. Delta обмежений 250 ms, щоб після великого зависання не виникало spiral of death.»
+Термінал 2:
 
-## 1:30–2:20 — Input + фізика
+```bash
+npm run dev:client
+```
 
-«`createInput()` — замикання. Set натиснутих клавіш закритий усередині функції. Зовнішній код отримує `isDown` і `justPressed`. `integrate(ship, input, dt)` працює тільки зі state, input та dt: поворот, thrust, drag і speed clamp. Після інтегрування корабель wrap-иться через межі арени.»
+Відкрити `http://localhost:5173`.
 
-## 2:20–3:00 — Canvas + interpolation
+## 2. Два вікна
 
-«Canvas збільшується на `devicePixelRatio`, але малювання працює в CSS-пікселях через transform. При resize canvas налаштовується повторно. Корабель малюється через `translate` і `rotate`. Для кута я використовую найкоротшу різницю, тому перехід біля 0/360° не стрибає.»
+У двох вкладках ввести різні імена, вибрати одну кімнату та натиснути Join. Показати roster — обидва імені видно на обох клієнтах.
 
-## 3:00–4:10 — Три експерименти
+## 3. Чат
 
-1. **100 ms busy-wait.** «Синхронний `while` блокує main thread. Поки callback не завершився, наступні JavaScript callbacks та rendering step не виконуються.»
+Написати повідомлення у першому вікні та показати появу повідомлення у другому.
 
-2. **setInterval(16).** «Timer не синхронізований з paint, тому має jitter/drift. Я вимірюю FPS та стандартне відхилення інтервалу за 10 секунд і перевіряю background tab.»
+## 4. Гра
 
-3. **Variable dt.** «У variable mode physics оновлюється один раз на кадр з реальним `dt`. При CPU throttling частота кадрів змінюється, отже змінюється й траєкторія. Fixed step прибирає залежність simulation від refresh rate.»
+Показати політ і `SPACE`. Координати корабля не передаються серверу — гра локальна, сервер на Lab 4 відповідає за кімнату та чат.
 
-## 4:10–5:00 — Типові питання
+## 5. EventEmitter
 
-**Чому Promise `.then()` виконується перед `setTimeout(..., 0)`?**
+Показати `server/src/rooms.js`: `Room extends EventEmitter`. Пояснити `join`, `leave`, `chat`, `empty` та чому `error` має listener.
 
-«`.then()` додається в microtask queue, а timer — у task queue. Після синхронного коду microtasks очищуються раніше за наступну task.»
+## 6. Streams/backpressure
 
-**Що таке `alpha`?**
+Показати `server/src/log/matchlog.js` і `server/src/log/replay.js`. Ланцюг: event → Transform → NDJSON → file; replay: read stream → HTTP response через pipeline. Пояснити `write() === false` і `drain`.
 
-«Це частка залишкового часу accumulator від одного fixed step: `alpha = accumulator / step`. Renderer змішує попередній і поточний state.»
+## 7. 2–3 короткі відповіді
 
-**Чому це важливо для multiplayer?**
+**Чому два вікна можуть спілкуватися без polling?**
+WebSocket створює постійне двобічне з'єднання; сервер може сам відправити `chat` і `roster` у кімнату.
 
-«Однаковий input + однакові fixed steps дають відтворювану simulation. Це основа для подальшого authoritative server і reconciliation.»
+**Що станеться при `/api/slow?ms=300`?**
+Busy-loop блокує єдиний JS thread Node, тому на цей час інші handlers теж чекають.
+
+**Що буде при `emit("error")` без listener?**
+Node викине необроблену помилку; процес може завершитися. Тому emitters, що можуть помилитися, мають `error` listener.

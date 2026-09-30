@@ -11,7 +11,10 @@ import {
   drawShip,
   interpolateShip,
 } from "./render/draw.js";
-import { busyWait, createIntervalExperiment } from "./experiments/experiments.js";
+import {
+  busyWait,
+  createIntervalExperiment,
+} from "./experiments/experiments.js";
 
 const canvas = document.querySelector("#game");
 const canvasWrap = document.querySelector("#canvas-wrap");
@@ -147,45 +150,52 @@ document.querySelector("#interval-run").addEventListener("click", (event) => {
   dom.intervalRange.textContent = "running…";
   dom.intervalCallbacks.textContent = "0";
   message.hidden = false;
-  message.textContent = "Experiment 2 running for 10 s. Switch to another tab for ~5 s, then return.";
+  message.textContent =
+    "Experiment 2 running for 10 s. Switch to another tab for ~5 s, then return.";
   setStatus("EXPERIMENT 2");
   intervalExperiment.start(10_000);
 });
 
-document.querySelector("#variable-toggle").addEventListener("click", (event) => {
-  variableTimestep = !variableTimestep;
-  event.currentTarget.classList.toggle("active", variableTimestep);
-  setStatus(variableTimestep ? "VARIABLE DT" : "FIXED 60 Hz");
-  message.hidden = false;
-  message.textContent = variableTimestep
-    ? "Variable timestep mode ON. Hold W/↑ for 5 s, then record POS; repeat with CPU 6×."
-    : "Fixed timestep restored.";
+document
+  .querySelector("#variable-toggle")
+  .addEventListener("click", (event) => {
+    variableTimestep = !variableTimestep;
+    event.currentTarget.classList.toggle("active", variableTimestep);
+    setStatus(variableTimestep ? "VARIABLE DT" : "FIXED 60 Hz");
+    message.hidden = false;
+    message.textContent = variableTimestep
+      ? "Variable timestep mode ON. Hold W/↑ for 5 s, then record POS; repeat with CPU 6×."
+      : "Fixed timestep restored.";
 
-  if (variableTimestep) {
-    useVariableLoop();
-  } else {
+    if (variableTimestep) {
+      useVariableLoop();
+    } else {
+      useFixedLoop();
+    }
+  });
+
+document
+  .querySelector("#reset-experiments")
+  .addEventListener("click", (event) => {
+    busyExperiment = false;
+    variableTimestep = false;
+    busyCount = 0;
+    dom.busyCount.textContent = "0";
+    dom.intervalFps.textContent = "—";
+    dom.intervalJitter.textContent = "—";
+    dom.intervalRange.textContent = "—";
+    dom.intervalCallbacks.textContent = "0";
+    dom.variablePos.textContent = "—";
+    intervalExperiment.stop();
     useFixedLoop();
-  }
-});
-
-document.querySelector("#reset-experiments").addEventListener("click", (event) => {
-  busyExperiment = false;
-  variableTimestep = false;
-  busyCount = 0;
-  dom.busyCount.textContent = "0";
-  dom.intervalFps.textContent = "—";
-  dom.intervalJitter.textContent = "—";
-  dom.intervalRange.textContent = "—";
-  dom.intervalCallbacks.textContent = "0";
-  dom.variablePos.textContent = "—";
-  intervalExperiment.stop();
-  useFixedLoop();
-  document.querySelectorAll(".lab-button.active").forEach((button) => button.classList.remove("active"));
-  event.currentTarget.blur();
-  message.hidden = true;
-  setStatus("FIXED 60 Hz");
-  resetShip();
-});
+    document
+      .querySelectorAll(".lab-button.active")
+      .forEach((button) => button.classList.remove("active"));
+    event.currentTarget.blur();
+    message.hidden = true;
+    setStatus("FIXED 60 Hz");
+    resetShip();
+  });
 
 window.addEventListener("keydown", (event) => {
   if (input.justPressed("KeyR")) resetShip();
