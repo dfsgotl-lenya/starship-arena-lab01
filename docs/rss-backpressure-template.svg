@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="420" viewBox="0 0 800 420">
+  <rect width="800" height="420" fill="#fff"/>
+  <text x="400" y="28" text-anchor="middle" font-family="Arial" font-size="20">RSS during throttled replay download — measurement template</text>
+  <line x1="70" y1="360" x2="760" y2="360" stroke="#333"/>
+  <line x1="70" y1="60" x2="70" y2="360" stroke="#333"/>
+  <line x1="70" y1="230" x2="760" y2="230" stroke="#ccc"/>
+  <path d="M75 170 C200 165 320 172 440 168 S650 170 755 166" fill="none" stroke="#1f77b4" stroke-width="4"/>
+  <text x="400" y="395" text-anchor="middle" font-family="Arial" font-size="14">time →</text>
+  <text x="22" y="220" text-anchor="middle" font-family="Arial" font-size="14" transform="rotate(-90 22 220)">RSS (MB) →</text>
+  <text x="400" y="330" text-anchor="middle" font-family="Arial" font-size="14">Replace with your measured logs using docs/plot-rss.py</text>
+</svg>

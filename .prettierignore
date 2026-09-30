@@ -1,0 +1,6 @@
+node_modules/
+dist/
+**/dist/
+**/bad.json
+logs/
+server/data/generated/

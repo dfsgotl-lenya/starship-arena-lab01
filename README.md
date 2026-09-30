@@ -1,238 +1,246 @@
-# Lab 01 — The Event Loop Is the Game Loop
+# Lab 04 — Node.js: EventEmitter, Streams and WebSocket Server
 
 ## Starship Arena
 
-Індивідуальна лабораторна робота з курсу **JavaScript — Build a Multiplayer Browser Game**.
+Продовження лабораторних 1–3 у тому самому репозиторії. У цій роботі клієнт гри розділено із сервером Node.js. Сервер керує кімнатами, WebSocket-підключеннями, чатом і логами матчу. Координати кораблів навмисно не передаються через мережу — це тема Lab 05.
 
-У цій роботі я створив браузерний прототип гри **Starship Arena** на **Vite + vanilla JavaScript + HTML5 Canvas 2D**. Реалізовано керування одним космічним кораблем, фізику його руху та ігровий цикл. Код фізики відокремлений від DOM і рендера, щоб у наступних лабораторних його можна було використати для multiplayer-версії.
+## Що реалізовано
 
-## Мета роботи
+- npm workspaces: `client/` + `server/`;
+- Node.js ESM із `node:` imports;
+- `node:http` для static serving, `GET/POST /api/rooms`, `/health`, `/api/slow`;
+- захист static paths від `..` path traversal;
+- Vite proxy для `/api` та `/ws` у development;
+- конфігурація через `.env` (`PORT`, `HOST`, `LOG_DIR` тощо) з перевіркою в `server/src/config.js`;
+- graceful shutdown через `SIGINT` / `SIGTERM`;
+- `Room extends EventEmitter`, `RoomManager` на `Map`, події `join`, `leave`, `chat`, `empty`, `event`;
+- валідація WebSocket JSON protocol v0, `maxPayload`, rate limit і cap кімнат/гравців;
+- join timeout 5 s;
+- heartbeat: ping кожні 15 s, два пропущені pong → terminate;
+- slow-client policy через `socket.bufferedAmount`;
+- клієнтська WebSocket-обгортка з send queue та reconnect backoff;
+- match logs як object-mode `Transform` → NDJSON → `pipeline` → файл;
+- replay endpoint, який стрімить файл без читання всього логу в пам'ять;
+- chat та roster у двох вікнах браузера;
+- Lab 1–3 gameplay збережено на клієнті.
 
-Дослідити роботу JavaScript Event Loop та реалізувати ігровий цикл із фіксованим кроком симуляції.
-
-У роботі реалізовано:
-
-- `requestAnimationFrame` для рендера;
-- fixed timestep `1/60` с;
-- accumulator та інтерполяцію стану;
-- `createInput()` на основі замикання;
-- чисту функцію `integrate(ship, input, dt)` для фізики;
-- Canvas 2D з урахуванням `devicePixelRatio`;
-- загортання корабля через межі арени;
-- HUD із `STEPS/S`, `FRAMES/S` і тривалістю кадру;
-- три експерименти з навмисним погіршенням роботи циклу.
-
-## Технології
-
-- JavaScript (ES modules)
-- Vite
-- HTML5 Canvas 2D
-- ESLint
-- Prettier
-
-## Що було зроблено
-
-### 1. Ігровий цикл
-
-У `src/loop.js` реалізовано цикл на `requestAnimationFrame`. Час накопичується в `accumulator`, а симуляція виконується кроками однакової довжини:
-
-```js
-const STEP = 1 / 60;
-
-accumulator += Math.min((now - last) / 1000, 0.25);
-
-while (accumulator >= STEP) {
-  simulate(STEP);
-  accumulator -= STEP;
-}
-
-const alpha = accumulator / STEP;
-render(alpha);
-```
-
-Фізика працює з фіксованим `dt = 1/60`, незалежно від частоти оновлення монітора. Для відображення використовується інтерполяція між попереднім і поточним станом.
-
-### 2. Обробка клавіатури через closure
-
-У `src/input.js` створено `createInput()`. Натиснуті клавіші зберігаються у внутрішньому `Set`, доступ до якого мають тільки функція та повернені нею методи:
-
-```js
-isDown(code)
-justPressed(code)
-endFrame()
-```
-
-Таким способом реалізовано приватний стан обробника клавіатури.
-
-### 3. Фізика корабля
-
-У `src/sim/ship.js` реалізовано стан корабля:
-
-```text
-x, y       — координати
-vx, vy     — швидкість
-angle      — кут повороту
-thrust     — стан тяги
-```
-
-Функція `integrate(ship, input, dt)` не залежить від DOM, Canvas чи UI. Вона виконує поворот, прискорення корабля, drag та обмеження максимальної швидкості.
-
-### 4. Арена і wrapping
-
-У `src/sim/arena.js` реалізовано загортання через межі арени. Якщо корабель виходить за одну межу, він з'являється з протилежного боку.
-
-### 5. Canvas і devicePixelRatio
-
-У `src/render/canvas.js` Canvas налаштовується відповідно до `devicePixelRatio`, щоб зображення залишалося чітким на дисплеях із високою щільністю пікселів. Також Canvas перебудовується при зміні розміру вікна.
-
-### 6. Рендер корабля
-
-У `src/render/draw.js` корабель малюється засобами Canvas 2D. Під час рендера використовується `alpha` для інтерполяції між двома станами симуляції.
-
-## Керування
-
-- `W` / `ArrowUp` — тяга;
-- `A` / `ArrowLeft` — поворот ліворуч;
-- `D` / `ArrowRight` — поворот праворуч.
-
-Корабель може безперервно літати по арені завдяки wrapping.
-
-## Експерименти
-
-### Experiment 1 — блокування 100 ms
-
-У цикл навмисно додано синхронний busy-wait приблизно на 100 ms.
-
-Результат:
-
-- виникають затримки кадрів;
-- `FRAME` збільшується;
-- `FRAMES/S` зменшується;
-- JavaScript на основному потоці не може виконати інший код, поки блокуючий цикл не завершиться.
-
-**Мої вимірювання:**
-
-| Показник | Результат |
-|---|---:|
-| frame-time під час блокування | 0.01 ms |
-| frames/s під час тесту | 129 fps |
-| кількість блокувань за 10 s | 24 |
-
-### Experiment 2 — setInterval замість rAF
-
-Для порівняння використано:
-
-```js
-setInterval(frame, 16);
-```
-
-Зібрано показники частоти кадрів та нерівномірності інтервалів.
-
-**Мої вимірювання:**
-
-| Показник | Результат |
-|---|---:|
-| `setInterval` FPS за 10 s | 62.5 fps |
-| jitter σ | 1.32 ms |
-| мінімальний інтервал | 10.90 ms |
-| максимальний інтервал | 20.70 ms |
-
-### Experiment 3 — variable timestep
-
-Порівняно два режими симуляції: variable timestep та fixed timestep `1/60`.
-
-Тест виконано без throttling і з CPU throttling `6×`.
-
-**Мої вимірювання координат після 5 s thrust:**
-
-| Режим | Без throttling | CPU 6× |
-|---|---:|---:|
-| Variable dt | 52, 350 | 45, 350 |
-| Fixed `1/60` s | 77, 350 | 921, 350 |
-
-Експеримент показує, що при variable timestep результат залежить від фактичного часу між кадрами, а fixed timestep відокремлює фізику від частоти рендера.
-
-## Event Loop
-
-Під час виконання роботи я дослідив взаємодію:
-
-```text
-JavaScript code
-    ↓
-Call Stack
-    ↓
-Tasks / Microtasks
-    ↓
-requestAnimationFrame
-    ↓
-Render / Paint
-```
-
-Це дозволило перевірити, чому блокуючий JavaScript зупиняє оновлення сторінки та чому `requestAnimationFrame` зручно використовувати для анімації.
-
-Приклад порядку виконання:
-
-```js
-console.log("1");
-
-setTimeout(() => console.log("2"), 0);
-
-Promise.resolve().then(() => console.log("3"));
-
-console.log("4");
-```
-
-Результат:
-
-```text
-1
-4
-3
-2
-```
-
-## Структура проєкту
+## Структура
 
 ```text
 starship-arena-lab01/
-├── index.html
 ├── package.json
-├── eslint.config.js
-├── .prettierrc.json
-├── .nvmrc
-├── README.md
-├── DEFENSE.md
-└── src/
-    ├── main.js
-    ├── loop.js
-    ├── input.js
-    ├── experiments/
-    │   └── experiments.js
-    ├── sim/
-    │   ├── ship.js
-    │   └── arena.js
-    └── render/
-        ├── canvas.js
-        └── draw.js
+├── .env.example
+├── client/
+│   ├── package.json
+│   ├── vite.config.js
+│   ├── index.html
+│   ├── public/assets/
+│   └── src/
+│       ├── connection.js
+│       ├── lobby/
+│       ├── assets/
+│       ├── sim/
+│       └── render/
+└── server/
+    ├── package.json
+    ├── src/
+    │   ├── index.js
+    │   ├── config.js
+    │   ├── protocol.js
+    │   ├── rate-limit.js
+    │   ├── rooms.js
+    │   ├── ws.js
+    │   └── log/
+    │       ├── matchlog.js
+    │       └── replay.js
+    ├── test/
+    └── scripts/
 ```
 
 ## Запуск
 
+У корені репозиторію:
+
 ```bash
 npm install
-npm run dev
 ```
 
-Перевірка:
+Створи `.env` на основі `.env.example`.
+
+### Development
+
+Термінал 1:
+
+```bash
+npm run dev:server
+```
+
+Термінал 2:
+
+```bash
+npm run dev:client
+```
+
+Відкрити:
+
+```text
+http://localhost:5173
+```
+
+Vite передає `/api` і `/ws` на Node-сервер.
+
+### Production
+
+```bash
+npm run build
+npm start
+```
+
+Node-сервер віддає зібраний `client/dist`.
+
+## WebSocket protocol v0
+
+```json
+{ "v": 0, "type": "join", "room": "alpha", "name": "Pilot" }
+{ "v": 0, "type": "chat", "text": "hello" }
+{ "v": 0, "type": "leave" }
+```
+
+Сервер відправляє `joined`, `roster`, `chat`, `errorMessage`, `left`.
+
+На цьому етапі через сокет не передаються `x/y`, швидкість або кут корабля.
+
+## EventEmitter і `error`
+
+`Room` і `RoomManager` успадковують `EventEmitter`. Для кожного emitter, який може помилитися, встановлено слухач `error`.
+
+Без слухача:
+
+```js
+const emitter = new EventEmitter();
+emitter.emit("error", new Error("boom"));
+```
+
+Node вважає необроблену `error`-подію винятком і процес завершується. Зі слухачем процес продовжує роботу. У проєкті це продемонстровано також у `server/scripts/event-error-demo.js`.
+
+## Node event loop і блокування 300 ms
+
+Node виконує JavaScript на одному потоці. У спрощеному вигляді фази libuv можна показати так:
+
+```text
+timers → pending callbacks → poll (I/O) → check (setImmediate) → close
+              ↑
+      nextTick + promise microtasks
+```
+
+Endpoint:
+
+```text
+GET /api/slow?ms=300
+```
+
+навмисно займає main thread busy-loop приблизно на 300 ms. Поки цикл заблокований, інший HTTP/WebSocket handler не отримує виконання JavaScript. Це практична демонстрація того, чому CPU-bound синхронний код на сервері затримує всіх клієнтів.
+
+Додатковий порядок можна перевірити:
+
+```bash
+node server/scripts/event-loop-demo.js
+```
+
+`process.nextTick` і promise reaction мають стабільний пріоритет над звичайними task callbacks; `setTimeout(0)` і `setImmediate` з головного модуля можуть міняти порядок залежно від запуску. Усередині I/O callback `setImmediate` має передбачуваніше місце в циклі.
+
+## Backpressure і match logs
+
+Кожна кімната має match log. Події кімнати проходять через:
+
+```text
+Room event
+   ↓
+Readable.from(async generator)
+   ↓
+Transform (object → NDJSON line)
+   ↓
+pipeline()
+   ↓
+createWriteStream(LOG_DIR/...ndjson)
+```
+
+Для replay використовується `createReadStream` і `pipeline(readStream, response)`. Весь файл не завантажується в RAM.
+
+Backpressure означає, що швидкий producer не повинен безмежно накопичувати дані, якщо consumer повільний. У Node `writable.write()` повертає `false`, коли внутрішній buffer досяг `highWaterMark`; producer повинен чекати `drain`. `pipeline` автоматично зв'язує потоки та обробляє завершення/помилки.
+
+## RSS experiment
+
+Згенерувати синтетичний лог:
+
+```bash
+node server/scripts/generate-log.js 200 ./logs/synthetic-200mb.ndjson
+```
+
+У другому терміналі запустити монітор пам'яті:
+
+```bash
+node server/scripts/rss-monitor.js 30000 250 ./logs/rss.csv
+```
+
+Запустити сервер та скачати replay:
+
+```text
+http://localhost:3001/api/replays/synthetic-200mb.ndjson
+```
+
+У Chrome DevTools → Network увімкнути повільне підключення, щоб replay ішов через throttled channel. Після завершення побудувати графік:
+
+```bash
+python docs/plot-rss.py logs/rss.csv
+```
+
+Після вимірювання скрипт `docs/plot-rss.py` створює `docs/rss-backpressure.png`. Перед здачею замініть шаблон на власний виміряний графік. Крива має залишатися приблизно пласкою, а не рости пропорційно до розміру файлу.
+
+![RSS during throttled replay download](docs/rss-backpressure-template.svg)
+
+### Мої вимірювання
+
+| Показник           | Результат |
+| ------------------ | --------: |
+| synthetic log size |    ___ MB |
+| download duration  |     ___ s |
+| min RSS            |    ___ MB |
+| max RSS            |    ___ MB |
+| delta RSS          |    ___ MB |
+
+## Що перевірив
 
 ```bash
 npm run lint
 npm run format:check
 npm run build
+npm test
+```
+
+Два браузерні вікна мають зайти в одну кімнату. На обох вікнах видно однаковий roster; повідомлення чату з одного вікна з'являються в іншому.
+
+## Git
+
+Для кожної лабораторної використовується окрема гілка та Pull Request:
+
+```text
+main
+ ├── lab-01 → tag lab-01
+ ├── lab-02 → PR → main → tag lab-02
+ ├── lab-03 → PR → main → tag lab-03
+ └── lab-04 → PR → main → tag lab-04
+```
+
+Після merge цієї лабораторної:
+
+```bash
+git switch main
+git pull origin main
+git tag lab-04
+git push origin refs/tags/lab-04
 ```
 
 ## Висновок
 
-У роботі я реалізував базовий ігровий цикл для браузерної гри та дослідив особливості виконання JavaScript через Event Loop. Було реалізовано fixed timestep, `requestAnimationFrame`, інтерполяцію, closure-based input, чисту фізику корабля, Canvas 2D та wrapping арени.
-
-Три експерименти дозволили на практиці перевірити вплив блокуючого коду, `setInterval` і variable timestep на роботу гри.
+У Lab 04 я виніс гру в npm workspace `client/server` і додав Node.js сервер з HTTP API, EventEmitter-кiмнатами, WebSocket join/leave/chat, heartbeat, rate limiting та backpressure policy. Логи матчів пишуться потоками NDJSON, а replay віддається клієнту через `pipeline` без буферизації всього файлу. Код усе ще не передає координати гри по мережі — це залишено для Lab 05.
