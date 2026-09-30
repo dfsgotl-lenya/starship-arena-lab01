@@ -203,11 +203,11 @@ python docs/plot-rss.py logs/rss.csv
 
 | Показник           | Результат |
 | ------------------ | --------: |
-| synthetic log size |    ___ MB |
-| download duration  |     ___ s |
-| min RSS            |    ___ MB |
-| max RSS            |    ___ MB |
-| delta RSS          |    ___ MB |
+| synthetic log size |    200.0 MB |
+| download duration  |     2.03 s |
+| min RSS            |    72.31 MB |
+| max RSS            |    74.02 MB |
+| delta RSS          |    1.71 MB |
 
 ## Що перевірив
 
