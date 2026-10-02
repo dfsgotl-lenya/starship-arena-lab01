@@ -21,6 +21,8 @@ export default [
         requestAnimationFrame: "readonly",
         cancelAnimationFrame: "readonly",
         ResizeObserver: "readonly",
+        TextEncoder: "readonly",
+        TextDecoder: "readonly",
         fetch: "readonly",
         WebSocket: "readonly",
       },

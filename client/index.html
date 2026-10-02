@@ -4,15 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#050a14" />
-    <title>Starship Arena — Lab 04</title>
+    <title>Starship Arena — Lab 05</title>
   </head>
   <body>
     <main class="app-shell">
       <header class="topbar">
         <div>
-          <p class="eyebrow">JavaScript • Lab 04</p>
+          <p class="eyebrow">JavaScript • Lab 05</p>
           <h1>STARSHIP ARENA</h1>
-          <p class="subtitle">Node.js • EventEmitter • streams • WebSocket</p>
+          <p class="subtitle">
+            Authoritative server • prediction • reconciliation • binary protocol
+          </p>
         </div>
         <div class="status-badge" id="status-badge">LOADING</div>
       </header>
@@ -22,7 +24,7 @@
           <div class="canvas-wrap" id="canvas-wrap" tabindex="0">
             <canvas id="game" aria-label="Поле гри Starship Arena"></canvas>
             <div id="loading-screen" class="overlay loading-overlay">
-              <p class="section-label">Lab 03 assets + Lab 04 server</p>
+              <p class="section-label">Lab 05 networked game</p>
               <p id="loading-label">Loading…</p>
               <p id="loading-error" class="loading-error"></p>
               <button id="retry-loading" class="retry-button" hidden>
@@ -43,6 +45,31 @@
                 <span>ACTIVE <strong id="active-power">—</strong></span>
                 <span>ROOM <strong id="room">—</strong></span>
               </div>
+              <div id="netgraph" class="netgraph" hidden>
+                <div class="netgraph-title">
+                  NETGRAPH <small id="protocol-label">BINARY</small>
+                </div>
+                <div>RTT <strong id="net-rtt">0 ms</strong></div>
+                <div>SNAP AGE <strong id="net-age">0 ms</strong></div>
+                <div>RX/TX <strong id="net-bytes">0 / 0 B/s</strong></div>
+                <div>PENDING <strong id="net-pending">0</strong></div>
+                <div>CORRECTION <strong id="net-correction">0 px</strong></div>
+                <div>
+                  INTERP
+                  <input
+                    id="interp-delay"
+                    type="number"
+                    min="33"
+                    max="250"
+                    step="1"
+                    value="100"
+                  />
+                  ms
+                </div>
+                <button id="break-determinism" class="net-button">
+                  Break determinism
+                </button>
+              </div>
             </div>
           </div>
           <div class="controls-row">
@@ -50,23 +77,22 @@
             <span><kbd>A</kbd>/<kbd>←</kbd> turn left</span>
             <span><kbd>D</kbd>/<kbd>→</kbd> turn right</span>
             <span><kbd>SPACE</kbd> fire</span>
-            <span><kbd>R</kbd> reset</span>
           </div>
         </div>
 
         <aside class="lab-panel">
           <section>
-            <p class="section-label">LAB 04 FEATURES</p>
+            <p class="section-label">LAB 05 FEATURES</p>
             <div class="feature-list">
               <div>
-                <strong>EventEmitter</strong><span>rooms + events</span>
+                <strong>30 Hz server</strong><span>authoritative tick</span>
               </div>
-              <div><strong>Streams</strong><span>NDJSON + pipeline</span></div>
-              <div><strong>WebSocket</strong><span>join + chat</span></div>
+              <div><strong>Prediction</strong><span>input replay</span></div>
               <div>
-                <strong>Backpressure</strong><span>slow-client policy</span>
+                <strong>Interpolation</strong><span>remote entities</span>
               </div>
-              <div><strong>node:http</strong><span>static + API</span></div>
+              <div><strong>DataView</strong><span>little-endian</span></div>
+              <div><strong>Latency</strong><span>jitter + drop</span></div>
             </div>
           </section>
 

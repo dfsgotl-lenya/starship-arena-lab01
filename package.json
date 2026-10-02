@@ -5,14 +5,15 @@
   "type": "module",
   "workspaces": [
     "client",
-    "server"
+    "server",
+    "shared"
   ],
   "scripts": {
     "dev:client": "npm run dev --workspace client",
     "dev:server": "node --env-file=.env --watch server/src/index.js",
     "build": "npm run build --workspace client",
     "start": "node server/src/index.js",
-    "lint": "eslint client/src server/src server/test server/scripts",
+    "lint": "eslint client/src server/src server/test server/scripts shared",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "npm test --workspace server"

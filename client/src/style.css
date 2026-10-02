@@ -15,6 +15,9 @@
 * {
   box-sizing: border-box;
 }
+[hidden] {
+  display: none !important;
+}
 body {
   margin: 0;
   min-width: 320px;
@@ -418,4 +421,53 @@ kbd {
   font-size: 11px;
   color: #ffcf58;
   margin-top: 8px;
+}
+
+.netgraph {
+  position: absolute;
+  right: 14px;
+  top: 14px;
+  z-index: 4;
+  display: grid;
+  gap: 5px;
+  min-width: 230px;
+  padding: 11px 12px;
+  border: 1px solid rgb(131 204 255 / 22%);
+  border-radius: 10px;
+  background: rgb(2 8 17 / 82%);
+  backdrop-filter: blur(8px);
+  font-size: 0.68rem;
+  color: #91a7bd;
+}
+.netgraph-title {
+  display: flex;
+  justify-content: space-between;
+  color: #dff6ff;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+.netgraph small {
+  color: #66ddff;
+}
+.netgraph strong {
+  color: #9be7ff;
+  float: right;
+}
+.netgraph input {
+  width: 55px;
+  margin-left: 4px;
+  padding: 2px 4px;
+  border: 1px solid #24435e;
+  border-radius: 5px;
+  background: #07111e;
+  color: #eaf2ff;
+}
+.net-button {
+  margin-top: 4px;
+  padding: 6px 8px;
+  border: 1px solid #6d5360;
+  border-radius: 6px;
+  background: #1b1116;
+  color: #ffd8df;
+  font-size: 0.68rem;
 }

@@ -6,5 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build"
+  },
+  "dependencies": {
+    "@starship-arena/shared": "file:../shared"
   }
 }

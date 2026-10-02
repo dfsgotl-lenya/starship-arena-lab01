@@ -3,15 +3,14 @@ import { createInput } from "./input.js";
 import { createLoop } from "./loop.js";
 import { setupCanvas } from "./render/canvas.js";
 import { drawArenaFrame, drawBackground, drawWorld } from "./render/draw.js";
-import { World } from "./sim/world.js";
-import { Ship } from "./sim/ship.js";
 import { loadAll, loadJson } from "./assets/loader.js";
 import { createAudioEngine } from "./audio.js";
 import { Lobby } from "./lobby/lobby.js";
 import { mountLobby } from "./lobby/dom.js";
-import { createHud } from "./hud.js";
 import { mountDiagnostics } from "./diagnostics.js";
+import { createHud } from "./hud.js";
 import { GameConnection } from "./connection.js";
+import { NetworkGame } from "./netcode/game-client.js";
 
 const canvas = document.querySelector("#game");
 const canvasApi = setupCanvas(canvas);
@@ -20,33 +19,67 @@ const input = createInput(window);
 const audio = createAudioEngine();
 const lobby = new Lobby();
 const connection = new GameConnection();
-const dom = {
-  loading: document.querySelector("#loading-screen"),
-  loadingLabel: document.querySelector("#loading-label"),
-  loadingError: document.querySelector("#loading-error"),
-  retry: document.querySelector("#retry-loading"),
-  lobby: document.querySelector("#lobby-screen"),
-  game: document.querySelector("#game-screen"),
-  canvasWrap: document.querySelector("#canvas-wrap"),
-  statusBadge: document.querySelector("#status-badge"),
-  steps: document.querySelector("#steps"),
-  frames: document.querySelector("#frames"),
-  frameTime: document.querySelector("#frame-time"),
-  hp: document.querySelector("#hp"),
-  score: document.querySelector("#score"),
-  entities: document.querySelector("#entities"),
-  activePower: document.querySelector("#active-power"),
-  room: document.querySelector("#room"),
-  diagnostics: document.querySelector("#diagnostics"),
-  chatPanel: document.querySelector("#chat-panel"),
-  roster: document.querySelector("#roster"),
-  rosterCount: document.querySelector("#roster-count"),
-  chatLog: document.querySelector("#chat-log"),
-  chatForm: document.querySelector("#chat-form"),
-  chatInput: document.querySelector("#chat-input"),
-  leaveRoom: document.querySelector("#leave-room"),
-};
-
+const dom = Object.fromEntries(
+  [
+    "loading",
+    "loadingLabel",
+    "loadingError",
+    "retry",
+    "lobby",
+    "game",
+    "canvasWrap",
+    "statusBadge",
+    "steps",
+    "frames",
+    "frameTime",
+    "hp",
+    "score",
+    "entities",
+    "activePower",
+    "room",
+    "diagnostics",
+    "chatPanel",
+    "roster",
+    "rosterCount",
+    "chatLog",
+    "chatForm",
+    "chatInput",
+    "leaveRoom",
+    "netgraph",
+    "protocolLabel",
+    "netRtt",
+    "netAge",
+    "netBytes",
+    "netPending",
+    "netCorrection",
+    "interpDelay",
+    "breakDeterminism",
+  ].map((id) => [
+    id,
+    document.querySelector(
+      `#${id.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`)}`,
+    ),
+  ]),
+);
+// Explicit aliases for ids that do not map cleanly.
+dom.statusBadge = document.querySelector("#status-badge");
+dom.canvasWrap = document.querySelector("#canvas-wrap");
+dom.loadingLabel = document.querySelector("#loading-label");
+dom.loadingError = document.querySelector("#loading-error");
+dom.retry = document.querySelector("#retry-loading");
+dom.loading = document.querySelector("#loading-screen");
+dom.lobby = document.querySelector("#lobby-screen");
+dom.game = document.querySelector("#game-screen");
+dom.chatPanel = document.querySelector("#chat-panel");
+dom.netgraph = document.querySelector("#netgraph");
+dom.protocolLabel = document.querySelector("#protocol-label");
+dom.netRtt = document.querySelector("#net-rtt");
+dom.netAge = document.querySelector("#net-age");
+dom.netBytes = document.querySelector("#net-bytes");
+dom.netPending = document.querySelector("#net-pending");
+dom.netCorrection = document.querySelector("#net-correction");
+dom.interpDelay = document.querySelector("#interp-delay");
+dom.breakDeterminism = document.querySelector("#break-determinism");
 const stars = Array.from({ length: 120 }, (_, index) => ({
   x: ((index * 73) % 997) / 997,
   y: ((index * 151) % 991) / 991,
@@ -54,18 +87,14 @@ const stars = Array.from({ length: 120 }, (_, index) => ({
   speed: 0.6 + (index % 5) * 0.15,
   phase: index * 0.37,
 }));
-
 const hud = createHud(dom, events);
 let assets = null;
-let manifest = null;
-let world = null;
 let loop = null;
-let lobbyCleanup = null;
-let bootController = null;
 let currentPlayerName = "Pilot";
 let currentRoom = null;
 let joined = false;
 let serverJoined = false;
+let netGame = null;
 
 function showCanvasLoading(progress, label, error = "") {
   const { ctx, size } = canvasApi;
@@ -96,7 +125,6 @@ function showCanvasLoading(progress, label, error = "") {
     ctx.fillText(error, size.width / 2, y + 72);
   }
 }
-
 function appendChat(text, kind = "system") {
   const row = document.createElement("p");
   row.className = `chat-line ${kind}`;
@@ -105,7 +133,6 @@ function appendChat(text, kind = "system") {
   while (dom.chatLog.children.length > 50)
     dom.chatLog.lastElementChild.remove();
 }
-
 function renderRoster(players) {
   dom.roster.innerHTML = players
     .map((player) => `<span>${player.name}</span>`)
@@ -113,95 +140,105 @@ function renderRoster(players) {
   dom.rosterCount.textContent = `${players.length} player${players.length === 1 ? "" : "s"}`;
 }
 
-function setupWorld(room) {
-  world = new World({
-    width: canvasApi.size.width,
-    height: canvasApi.size.height,
-    events,
-  });
-  world.roomName = room.name;
-  world.reset();
-  world.width = canvasApi.size.width;
-  world.height = canvasApi.size.height;
-  world.seed(room.arena);
-  const ship = new Ship(world.width / 2, world.height / 2);
-  world.spawn(ship);
-}
-
-function startGame() {
-  if (!world || joined) return;
+function startNetworkGame(joinInfo = {}) {
   joined = true;
   dom.loading.hidden = true;
   dom.lobby.hidden = true;
   dom.game.hidden = false;
+  dom.netgraph.hidden = false;
   dom.diagnostics.hidden = false;
   dom.chatPanel.hidden = false;
   dom.statusBadge.textContent = currentRoom.name.toUpperCase();
   dom.room.textContent = currentRoom.name;
+  netGame = new NetworkGame({
+    connection,
+    width: canvasApi.size.width,
+    height: canvasApi.size.height,
+    input,
+    events,
+    playerId: joinInfo.playerId ?? null,
+    shipId: joinInfo.shipId ?? null,
+  });
+  netGame.onRoster = renderRoster;
+  netGame.onChat = ({ name, text }) => appendChat(`${name}: ${text}`, "user");
+  dom.protocolLabel.textContent = connection.protocol.toUpperCase();
   hud.setScore(0);
   mountDiagnostics(dom.diagnostics);
   loop?.stop();
   loop = createLoop({
     step: 1 / 60,
     simulate(dt) {
-      world.step(dt, { input });
-      world.playerShip &&= world.get(world.playerId);
+      netGame?.step(dt);
+      input.endFrame();
     },
     render(alpha, stats) {
-      const { ctx, size } = canvasApi;
-      drawBackground(ctx, size.width, size.height, world.time, stars);
-      drawArenaFrame(ctx, size.width, size.height);
-      drawWorld(ctx, world, alpha, assets);
-      hud.update(stats, world);
-      input.endFrame();
+      const renderState = netGame?.render(performance.now()) ?? {
+        entities: [],
+        score: 0,
+      };
+      renderState.roomName = currentRoom?.name ?? "—";
+      drawBackground(
+        canvasApi.ctx,
+        canvasApi.size.width,
+        canvasApi.size.height,
+        performance.now() / 1000,
+        stars,
+      );
+      drawArenaFrame(
+        canvasApi.ctx,
+        canvasApi.size.width,
+        canvasApi.size.height,
+      );
+      drawWorld(canvasApi.ctx, renderState, alpha, assets);
+      hud.update(stats, renderState);
+      updateNetgraph();
     },
   });
   loop.start();
   dom.canvasWrap.focus();
+}
+function updateNetgraph() {
+  if (!netGame) return;
+  const stats = netGame.netStats(connection);
+  dom.netRtt.textContent = `${stats.rtt.toFixed(0)} ms`;
+  dom.netAge.textContent = `${stats.snapshotAge.toFixed(0)} ms`;
+  dom.netBytes.textContent = `${stats.bytes.in.toFixed(0)} / ${stats.bytes.out.toFixed(0)} B/s`;
+  dom.netPending.textContent = String(stats.pending);
+  dom.netCorrection.textContent = `${stats.correction.toFixed(2)} px`;
 }
 
 async function boot() {
   dom.loading.hidden = false;
   dom.lobby.hidden = true;
   dom.game.hidden = true;
-  dom.diagnostics.hidden = true;
+  dom.netgraph.hidden = true;
   dom.chatPanel.hidden = true;
+  dom.diagnostics.hidden = true;
   dom.loadingError.textContent = "";
   dom.retry.hidden = true;
-  bootController?.abort();
-  bootController = new window.AbortController();
-  lobbyCleanup?.();
-  lobbyCleanup = null;
   try {
     showCanvasLoading(0, "Reading assets/manifest.json…");
-    manifest = await loadJson("/assets/manifest.json", {
-      signal: bootController.signal,
-    });
+    const manifest = await loadJson("/assets/manifest.json");
     const decoder = new window.OfflineAudioContext(1, 1, 44100);
     assets = await loadAll(manifest, {
       decoderContext: decoder,
-      signal: bootController.signal,
       onProgress: ({ done, total, key }) =>
         showCanvasLoading(done / total, `Loaded ${key} (${done}/${total})`),
     });
     audio.setBuffers(assets.sounds);
     dom.loading.hidden = true;
     dom.lobby.hidden = false;
-    lobbyCleanup = mountLobby(dom.lobby, lobby);
+    mountLobby(dom.lobby, lobby);
     void lobby.start();
     dom.statusBadge.textContent = "LOBBY READY";
   } catch (error) {
-    if (error?.name === "AbortError") return;
     dom.loadingError.textContent = `${error.message ?? "Asset loading failed"}. Use Retry.`;
     dom.retry.hidden = false;
     showCanvasLoading(0, "Loading failed", dom.loadingError.textContent);
   }
 }
 
-dom.retry.addEventListener("click", () => {
-  void boot();
-});
-
+dom.retry.addEventListener("click", () => void boot());
 lobby.addEventListener("joined", (event) => {
   currentRoom = event.detail.room;
   currentPlayerName = event.detail.playerName;
@@ -209,60 +246,41 @@ lobby.addEventListener("joined", (event) => {
   serverJoined = false;
   connection.connect();
 });
-
 connection.addEventListener("open", () => {
   dom.statusBadge.textContent = "WS CONNECTED";
-  if (currentRoom && !serverJoined) {
+  if (currentRoom && !serverJoined)
     connection.send({
       v: 0,
       type: "join",
       room: currentRoom.id,
       name: currentPlayerName,
     });
-  }
 });
-
 connection.addEventListener("joined", async (event) => {
   if (event.detail.room !== currentRoom?.id) return;
   serverJoined = true;
   await audio.unlock();
   audio.attach(events);
-  setupWorld(currentRoom);
-  startGame();
-  appendChat(`Joined ${currentRoom.name}.`, "system");
+  if (!loop) startNetworkGame(event.detail);
+  appendChat(`Joined ${currentRoom.name} via authoritative server.`, "system");
 });
-
-connection.addEventListener("roster", (event) => {
-  renderRoster(event.detail.players ?? []);
-});
-
-connection.addEventListener("chat", (event) => {
-  const { name, text } = event.detail;
-  appendChat(`${name}: ${text}`, "user");
-});
-
+connection.addEventListener("roster", (event) =>
+  renderRoster(event.detail.players ?? []),
+);
+connection.addEventListener("chat", (event) =>
+  appendChat(`${event.detail.name}: ${event.detail.text}`, "user"),
+);
 connection.addEventListener("errorMessage", (event) => {
   appendChat(`Server error: ${event.detail.message}`, "system");
   dom.statusBadge.textContent = "JOIN ERROR";
-  if (!joined) {
-    connection.close(1000, "join rejected");
-    currentRoom = null;
-    dom.lobby.hidden = false;
-    void lobby.start();
-  }
 });
-
 connection.addEventListener("reconnecting", (event) => {
   if (joined) appendChat(`Reconnecting in ${event.detail.delay} ms…`, "system");
 });
-
-connection.addEventListener("close", () => {
-  serverJoined = false;
-  if (joined) {
-    dom.statusBadge.textContent = "WS RECONNECTING";
-  }
-});
-
+window.setInterval(() => {
+  if (serverJoined)
+    connection.send({ v: 0, type: "ping", t: performance.now() });
+}, 1000);
 dom.chatForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const text = dom.chatInput.value.trim();
@@ -270,7 +288,6 @@ dom.chatForm.addEventListener("submit", (event) => {
   connection.send({ v: 0, type: "chat", text });
   dom.chatInput.value = "";
 });
-
 dom.leaveRoom.addEventListener("click", () => {
   if (serverJoined) connection.send({ v: 0, type: "leave" });
   connection.close(1000, "left room");
@@ -278,37 +295,34 @@ dom.leaveRoom.addEventListener("click", () => {
   joined = false;
   serverJoined = false;
   currentRoom = null;
-  world = null;
+  netGame = null;
   dom.game.hidden = true;
-  dom.diagnostics.hidden = true;
+  dom.netgraph.hidden = true;
   dom.chatPanel.hidden = true;
   dom.lobby.hidden = false;
   dom.statusBadge.textContent = "LOBBY READY";
   void lobby.start();
 });
-
 window.addEventListener("keydown", (event) => {
-  if (event.code === "Space" && !event.repeat && world?.playerShip) {
-    const bullet = world.playerShip.fire(world);
-    if (bullet)
-      dom.statusBadge.textContent = bullet.homing ? "HOMING FIRE" : "FIRE";
-  }
-  if (event.code === "KeyR" && input.justPressed("KeyR") && world) {
-    world.reset();
-    world.roomName = currentRoom?.name || "Training Ring";
-    world.seed(currentRoom?.arena || world.arenaConfig);
-    const ship = new Ship(world.width / 2, world.height / 2);
-    world.spawn(ship);
+  if (event.code === "Space" && !event.repeat && netGame) netGame.fire();
+  if (event.code === "KeyR" && netGame?.localShip) {
+    /* server reconciliation supplies the real state; R is intentionally no-op */
   }
 });
-
-dom.canvasWrap.addEventListener("pointerdown", () => {
-  void audio.unlock();
+dom.interpDelay.addEventListener("change", () =>
+  netGame?.setInterpolationDelay(Number(dom.interpDelay.value)),
+);
+dom.breakDeterminism.addEventListener("click", () => {
+  if (!netGame) return;
+  netGame.breakDeterminism = !netGame.breakDeterminism;
+  dom.breakDeterminism.textContent = netGame.breakDeterminism
+    ? "Fix determinism"
+    : "Break determinism";
+  dom.breakDeterminism.classList.toggle("active", netGame.breakDeterminism);
 });
+dom.canvasWrap.addEventListener("pointerdown", () => void audio.unlock());
 dom.canvasWrap.addEventListener("click", () => dom.canvasWrap.focus());
-
 window.addEventListener("beforeunload", () => {
-  bootController?.abort();
   lobby.leave();
   connection.close(1000, "page unload");
   loop?.stop();
@@ -316,5 +330,4 @@ window.addEventListener("beforeunload", () => {
   canvasApi.destroy();
   audio.dispose();
 });
-
 void boot();

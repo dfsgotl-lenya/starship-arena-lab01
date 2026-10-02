@@ -34,10 +34,8 @@ export function validateMessage(message) {
     typeof message !== "object" ||
     message.v !== VERSION ||
     typeof message.type !== "string"
-  ) {
+  )
     throw new Error("invalid message envelope");
-  }
-
   if (message.type === "join") {
     if (
       !stringInRange(message.room, 1, 64) ||
@@ -46,13 +44,24 @@ export function validateMessage(message) {
       throw new Error("invalid join shape");
     return message;
   }
-
   if (message.type === "chat") {
     if (!stringInRange(message.text, 1, MAX_CHAT_LENGTH))
       throw new Error("invalid chat shape");
     return message;
   }
-
-  if (message.type === "leave") return message;
+  if (message.type === "leave" || message.type === "ping") return message;
+  if (message.type === "input") {
+    if (!Number.isInteger(message.seq) || message.seq < 0)
+      throw new Error("invalid input seq");
+    if (!Number.isInteger(message.tick) || message.tick < 0)
+      throw new Error("invalid input tick");
+    if (
+      typeof message.thrust !== "boolean" ||
+      typeof message.fire !== "boolean" ||
+      ![-1, 0, 1].includes(message.turn)
+    )
+      throw new Error("invalid input shape");
+    return message;
+  }
   throw new Error(`unknown message type: ${message.type}`);
 }

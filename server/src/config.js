@@ -25,5 +25,9 @@ export function loadConfig() {
     messageRate: positiveInt("MESSAGE_RATE", 8, 1, 1000),
     heartbeatMs: positiveInt("HEARTBEAT_MS", 15000, 1000, 120000),
     slowClientBytes: positiveInt("SLOW_CLIENT_BYTES", 65536, 1024, 10_000_000),
+    tickRate: positiveInt("TICK_RATE", 30, 10, 120),
+    netLatencyMs: positiveInt("NET_LATENCY_MS", 0, 0, 5000),
+    netJitterMs: positiveInt("NET_JITTER_MS", 0, 0, 5000),
+    netDropPct: positiveInt("NET_DROP_PCT", 0, 0, 100),
   });
 }

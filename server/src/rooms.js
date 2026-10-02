@@ -1,18 +1,20 @@
 import { EventEmitter } from "node:events";
 import { randomUUID } from "node:crypto";
 import { MatchLog } from "./log/matchlog.js";
+import { Match } from "./match.js";
+import path from "node:path";
 
 export class Room extends EventEmitter {
   #players = new Map();
   #log;
   #closed = false;
-
   constructor({ id, name, capacity, arena }, config) {
     super();
     this.id = id;
     this.name = name;
     this.capacity = capacity;
     this.arena = { ...arena };
+    this.match = new Match(this, config);
     this.#log = new MatchLog(this, config.logDir);
     this.#log.start().catch((error) => this.emit("error", error));
     this.on("error", (error) => console.error(`[room:${this.id}]`, error));
@@ -25,12 +27,13 @@ export class Room extends EventEmitter {
     return this.#players.size;
   }
   get replayId() {
-    return this.#log.filePath.split(/[\\/]/).pop();
+    return path.basename(this.#log.filePath);
   }
 
   join(player) {
     if (this.#players.size >= this.capacity) throw new Error("room is full");
     this.#players.set(player.id, player);
+    this.match.addPlayer(player);
     this.#emitEvent("join", { player: { id: player.id, name: player.name } });
   }
 
@@ -38,6 +41,7 @@ export class Room extends EventEmitter {
     const player = this.#players.get(playerId);
     if (!player) return null;
     this.#players.delete(playerId);
+    this.match.removePlayer(playerId);
     this.#emitEvent("leave", { player: { id: player.id, name: player.name } });
     if (this.#players.size === 0) this.emit("empty");
     return player;
@@ -64,6 +68,7 @@ export class Room extends EventEmitter {
   async close() {
     if (!this.#closed) {
       this.#closed = true;
+      this.match.stop();
       this.emit("closed");
     }
     await this.#log.close();
@@ -80,7 +85,6 @@ export class Room extends EventEmitter {
 export class RoomManager extends EventEmitter {
   #rooms = new Map();
   #config;
-
   constructor(config) {
     super();
     this.#config = config;
@@ -101,6 +105,12 @@ export class RoomManager extends EventEmitter {
 
   get(id) {
     return this.#rooms.get(id);
+  }
+  stats() {
+    return [...this.#rooms.values()].map((room) => ({
+      room: room.id,
+      ...room.match.stats,
+    }));
   }
 
   create({

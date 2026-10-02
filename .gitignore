@@ -8,3 +8,8 @@ Thumbs.db
 .env
 coverage/
 server/data/generated/
+
+client/dist/
+node_modules/
+logs/
+.env

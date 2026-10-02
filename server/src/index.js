@@ -17,6 +17,7 @@ const logDir = path.resolve(rootDir, config.logDir);
 await mkdir(logDir, { recursive: true });
 
 const roomManager = new RoomManager(config);
+const flakyAttempts = new Map();
 roomManager.on("error", (error) => console.error("[room-manager]", error));
 
 const MIME = new Map([
@@ -137,6 +138,8 @@ const server = createServer(async (req, res) => {
       });
     if (req.method === "GET" && url.pathname === "/api/rooms")
       return json(res, 200, { rooms: roomManager.list() });
+    if (req.method === "GET" && url.pathname === "/api/stats")
+      return json(res, 200, { rooms: roomManager.stats() });
 
     if (req.method === "POST" && url.pathname === "/api/rooms") {
       try {
@@ -151,6 +154,17 @@ const server = createServer(async (req, res) => {
       }
     }
 
+    if (req.method === "GET" && url.pathname === "/api/flaky") {
+      const key = url.searchParams.get("key") ?? "default";
+      const attempts = flakyAttempts.get(key) ?? 0;
+      if (attempts < 2) {
+        flakyAttempts.set(key, attempts + 1);
+        return json(res, 503, { error: "temporary failure" });
+      }
+      flakyAttempts.delete(key);
+      return json(res, 200, { attempts: attempts + 1, ok: true });
+    }
+
     if (req.method === "GET" && url.pathname === "/api/slow") {
       const ms = Math.max(
         0,
@@ -158,7 +172,7 @@ const server = createServer(async (req, res) => {
       );
       const end = Date.now() + ms;
       while (Date.now() < end) {
-        /* intentionally block the event loop for the lab experiment */
+        /* intentionally blocks the event loop for the demo */
       }
       return json(res, 200, { ok: true, blockedMs: ms });
     }

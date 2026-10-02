@@ -1,48 +1,23 @@
-# Lab 04 — сценарій захисту (5 хв)
+# Lab 05 — захист (5 хв)
 
-## 1. Показати запуск
+1. Показати два вікна в одній кімнаті.
+2. Пояснити: клієнт передає `seq/thrust/turn/fire`, координати не передає.
+3. Показати `NETGRAPH`: RTT, snapshot age, bytes/s, pending, correction, interpolation.
+4. Утримувати W: корабель реагує одразу → це prediction.
+5. Увімкнути `latency=100&jitter=30&drop=2` і показати, що remote entities плавні через interpolation.
+6. Натиснути `Break determinism`: correction росте. Повернути `Fix determinism`.
+7. Натиснути `?protocol=json` та порівняти traffic із binary.
 
-Термінал 1:
+### Reflection
 
-```bash
-npm run dev:server
-```
+**1. Чому authoritative server?** Щоб клієнт не міг визначати істинний стан гри. Надсилання координат дозволило б підробити позицію й створювало б різні світи через drift/loss.
 
-Термінал 2:
+**2. Від чого залежить prediction?** Від детермінізму спільної симуляції. Порушення видно за зростанням reconciliation correction.
 
-```bash
-npm run dev:client
-```
+**3. Як працює reconciliation?** Snapshot tick 100 із `lastProcessedSeq=57`: client ставить authoritative state, видаляє input `<=57`, потім повторно програє `58+` до поточного prediction tick.
 
-Відкрити `http://localhost:5173`.
+**4. Навіщо interpolation у минулому?** Щоб мати дві точки для плавної інтерполяції. Компроміс: більше затримки → менше jitter.
 
-## 2. Два вікна
+**5. Що таке lag compensation?** Сервер може враховувати історичний стан під час hit detection, бо клієнт бачить remote player із interpolation delay.
 
-У двох вкладках ввести різні імена, вибрати одну кімнату та натиснути Join. Показати roster — обидва імені видно на обох клієнтах.
-
-## 3. Чат
-
-Написати повідомлення у першому вікні та показати появу повідомлення у другому.
-
-## 4. Гра
-
-Показати політ і `SPACE`. Координати корабля не передаються серверу — гра локальна, сервер на Lab 4 відповідає за кімнату та чат.
-
-## 5. EventEmitter
-
-Показати `server/src/rooms.js`: `Room extends EventEmitter`. Пояснити `join`, `leave`, `chat`, `empty` та чому `error` має listener.
-
-## 6. Streams/backpressure
-
-Показати `server/src/log/matchlog.js` і `server/src/log/replay.js`. Ланцюг: event → Transform → NDJSON → file; replay: read stream → HTTP response через pipeline. Пояснити `write() === false` і `drain`.
-
-## 7. 2–3 короткі відповіді
-
-**Чому два вікна можуть спілкуватися без polling?**
-WebSocket створює постійне двобічне з'єднання; сервер може сам відправити `chat` і `roster` у кімнату.
-
-**Що станеться при `/api/slow?ms=300`?**
-Busy-loop блокує єдиний JS thread Node, тому на цей час інші handlers теж чекають.
-
-**Що буде при `emit("error")` без listener?**
-Node викине необроблену помилку; процес може завершитися. Тому emitters, що можуть помилитися, мають `error` listener.
+**6. DataView vs Float32Array?** `DataView` підходить для протоколу зі змішаними типами й явним endian. `Float32Array` зручний для однорідних локальних масивів.
