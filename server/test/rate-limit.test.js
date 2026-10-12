@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { TokenBucket } from "../src/rate-limit.js";
+import { TokenBucket } from "../src/rate-limit.ts";
 
 test("token bucket limits bursts", () => {
   const bucket = new TokenBucket(2, 2);

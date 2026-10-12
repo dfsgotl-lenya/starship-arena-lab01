@@ -8,6 +8,7 @@
     "build": "vite build"
   },
   "dependencies": {
-    "@starship-arena/shared": "file:../shared"
+    "@starship-arena/shared": "file:../shared",
+    "zod": "^3.25.76"
   }
 }

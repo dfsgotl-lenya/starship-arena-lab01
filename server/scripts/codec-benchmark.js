@@ -3,7 +3,7 @@ import {
   encodeInput,
   encodeSnapshot,
   decodeSnapshot,
-} from "@starship-arena/shared/codec/binary.js";
+} from "@starship-arena/shared/codec/binary.ts";
 
 const entities = [];
 for (let i = 1; i <= 4; i += 1)

@@ -1,13 +1,13 @@
-# Lab 05 — Real-Time Networking: Prediction, Reconciliation & Binary Protocol
+# Lab 06 — TypeScript для протоколу та симуляції
 
 ## Starship Arena
 
-Продовження лабораторних 1–4. У цій роботі два клієнти грають через **authoritative Node.js server**. Клієнт передає тільки input (`thrust`, `turn`, `fire`), сервер є єдиним джерелом істини та надсилає snapshots зі швидкістю **30 Hz**.
+Продовження лабораторних 1–5. Код симуляції, протоколу, сервера та клієнта переведено на TypeScript зі строгим контролем типів. Сама гра, Canvas і цикл симуляції лишилися без UI-фреймворку. У Lab 5 два клієнти грають через **authoritative Node.js server**. Клієнт передає тільки input (`thrust`, `turn`, `fire`), сервер є єдиним джерелом істини та надсилає snapshots зі швидкістю **30 Hz**.
 
 ## Що зроблено
 
 - створено спільний workspace `shared/` для симуляції та протоколу;
-- `shared/sim/integrate.js` — детермінована фізика без DOM/Node API;
+- `shared/sim/integrate.ts` — детермінована фізика без DOM/Node API;
 - seeded PRNG (`mulberry32`) для однакового початкового світу;
 - серверний `Match` працює на 30 Hz через absolute-target `setTimeout`, без `setInterval`;
 - кожен input має `seq`, кожен snapshot містить `tick` і `lastProcessedSeq`;
@@ -35,18 +35,19 @@ client/  ── input ──>  WebSocket  ──>  server/Match
    └── prediction + reconciliation + interpolation
 
 shared/
+├── types.ts              # EntityId / Tick / Seq + model
 ├── sim/
-│   ├── integrate.js
-│   ├── world.js
-│   ├── entity.js
-│   ├── collision.js
-│   ├── vector.js
-│   └── prng.js
+│   ├── integrate.ts
+│   ├── world.ts
+│   ├── entity.ts
+│   ├── collision.ts
+│   ├── vector.ts
+│   └── prng.ts
 ├── codec/
-│   ├── binary.js
-│   └── json.js
+│   ├── binary.ts
+│   └── json.ts
 └── protocol/
-    └── index.js
+    └── index.ts           # Zod schemas + inferred message types
 ```
 
 ## Бінарний формат
@@ -128,7 +129,7 @@ http://localhost:5173/?protocol=json&latency=100&jitter=30&drop=2
 Запуск:
 
 ```bash
-node server/scripts/codec-benchmark.js
+npm run bench:codec
 ```
 
 Поточні шаблонні поля для власних вимірювань:
@@ -156,7 +157,7 @@ node server/scripts/codec-benchmark.js
 
 ## Запуск
 
-```bash
+```powershell
 npm install
 Copy-Item .env.example .env
 npm run dev:server
@@ -170,11 +171,12 @@ npm run dev:client
 
 Перевірки:
 
-```bash
+```powershell
+npm run typecheck
+npm test
+npm run build
 npm run lint
 npm run format:check
-npm run build
-npm test
 ```
 
 Серверні endpoints:
@@ -198,6 +200,43 @@ WS /ws
 
 **Інтерполяція.** Обрано `100 ms` як стартове значення: це дає запас у кілька 30-Hz snapshots і зменшує видиму jitter-нестабільність, ціною перегляду віддалених сутностей трохи в минулому.
 
+## Lab 06 — що змінилося в TypeScript
+
+- Усі модулі `shared/`, `server/src/` і `client/src/` мають розширення `.ts`; клієнт і сервер перевіряються одним кореневим `tsconfig.json`.
+- Увімкнено `strict`, `noUncheckedIndexedAccess` і `useUnknownInCatchVariables`. `npm run typecheck` запускає `tsc --noEmit` і виконується в GitHub Actions.
+- Вектор `Vector2` має `readonly x` та `readonly y`. Моделі snapshots — об'єднання сутностей за `kind`; клієнтські повідомлення — об'єднання за `type`. У відповідних `switch` є `default` з `never`.
+- `EntityId`, `Tick` і `Seq` — branded-типи. У звичайному JavaScript це числа, але TypeScript не дозволяє випадково передати sequence number замість ID; функції-конструктори також перевіряють діапазони.
+- `ClientMessageSchema`, `ServerMessageSchema`, snapshot і конфігурація оточення перевіряються Zod у runtime. `parseClientMessage(unknown)` повертає типізований результат, не кидає помилку на зламаному JSON, а WebSocket-обробник записує відмову в лог і закриває з'єднання.
+- Бінарний decoder перевіряє версію, тип повідомлення, точну довжину, кількість сутностей, прапорці, допустимий напрямок руху й скінченність числових значень.
+- Події кімнати мають типізовані payload-и через `EventEmitter`; у браузері `Bus<Events>` пов'язує ім'я події з її payload. У `catch` помилки розглядаються як `unknown`.
+
+### Три важливі типи простими словами
+
+1. **Structural types** — важлива форма об'єкта, а не назва класу. Наприклад, функції, які рухають корабель, отримують об'єкт з потрібними полями корабля і стан керування.
+2. **Discriminated union** — об'єднання кількох форм, які мають спільний маркер. `kind: "ship" | "bullet" | "asteroid" | "pickup"` дозволяє TypeScript знати, що поле `hp` є в корабля, а `ownerId` — у кулі.
+3. **Branded types** — числа, які лишаються числами під час виконання, але мають різні типи на етапі компіляції. `EntityId`, `Tick` і `Seq` не можна плутати між собою.
+
+### Що допоміг виявити TypeScript
+
+Типи відокремлюють UUID гравця (`string`) від числового `EntityId` корабля. Під час reconciliation кулі потрібно зіставляти за `shipId`, а не за `playerId`: це різні ідентифікатори, попри те, що обидва стосуються одного гравця. Також `Map.get()` і доступ за індексом можуть повернути `undefined`; код перевіряє ці випадки замість неявно припускати, що елемент існує.
+
+### Чому без React / Vue / Svelte
+
+У цій лабораторній роботі фреймворк не додавався: основна складність — Canvas, цикл гри, симуляція й мережевий протокол. Вони залишаються незалежними від DOM-фреймворку, а невелике лобі та HUD вже достатньо описані TypeScript-модулями. Додавання фреймворку лише заради переходу на TypeScript збільшило б залежності без користі для симуляції.
+
+### Перевірка Lab 06
+
+```bash
+npm install
+npm run typecheck
+npm test
+npm run build
+npm run lint
+npm run format:check
+```
+
+CI автоматично запускає `npm run typecheck`, тести та збірку клієнта. Перед здачею потрібно виконати ці команди в локальному оточенні, перевірити гру за сценарієм Lab 5 і лише тоді поставити тег `lab-06`.
+
 ## Висновок
 
-У Lab 05 гру переведено на модель authoritative server: клієнти передають input, сервер симулює світ на 30 Hz, а клієнти використовують prediction, reconciliation та interpolation. Дані snapshot/input передаються binary `DataView`, а JSON залишається режимом порівняння.
+У Lab 06 симуляція, сервер і клієнт переведені на TypeScript. Статичні типи відсікають частину помилок під час збірки, а Zod продовжує перевіряти мережеві дані та змінні оточення під час виконання. Авторитетна серверна симуляція, prediction, reconciliation, interpolation і binary `DataView` збережені; Canvas та ігровий цикл не залежать від UI-фреймворку.

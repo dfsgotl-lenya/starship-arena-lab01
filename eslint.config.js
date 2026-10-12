@@ -41,6 +41,7 @@ export default [
         URL: "readonly",
         setInterval: "readonly",
         setTimeout: "readonly",
+        setImmediate: "readonly",
         clearInterval: "readonly",
         clearTimeout: "readonly",
       },

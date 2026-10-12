@@ -5,13 +5,27 @@ import {
   decodeInput,
   encodeSnapshot,
   decodeSnapshot,
-} from "@starship-arena/shared/codec/binary.js";
-import { World } from "@starship-arena/shared/sim/world.js";
-import { integrate } from "@starship-arena/shared/sim/integrate.js";
+} from "@starship-arena/shared/codec/binary.ts";
+import { World } from "@starship-arena/shared/sim/world.ts";
+import { integrate } from "@starship-arena/shared/sim/integrate.ts";
 
 test("binary input round-trip", () => {
   const input = { seq: 42, tick: 100, thrust: true, turn: -1, fire: true };
   assert.deepEqual(decodeInput(encodeInput(input)), input);
+});
+
+test("binary decoder validates version and exact payload length", () => {
+  const valid = encodeInput({
+    seq: 1,
+    tick: 2,
+    thrust: false,
+    turn: 0,
+    fire: false,
+  });
+  const invalidVersion = valid.slice(0);
+  new DataView(invalidVersion).setUint8(0, 9);
+  assert.throws(() => decodeInput(invalidVersion), /version/i);
+  assert.throws(() => decodeInput(new Uint8Array([1, 1, 0])), /length/i);
 });
 
 test("binary snapshot round-trip keeps quantized angle", () => {

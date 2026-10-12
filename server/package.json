@@ -4,12 +4,13 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "node --env-file=../../.env --watch src/index.js",
-    "start": "node src/index.js",
-    "test": "node --test test/*.test.js"
+    "dev": "node --env-file=../.env --import tsx --watch src/index.ts",
+    "start": "node --import tsx src/index.ts",
+    "test": "tsx --test test/*.test.js"
   },
   "dependencies": {
+    "@starship-arena/shared": "file:../shared",
     "ws": "^8.18.3",
-    "@starship-arena/shared": "file:../shared"
+    "zod": "^3.25.76"
   }
 }

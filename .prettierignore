@@ -4,3 +4,5 @@ dist/
 **/bad.json
 logs/
 server/data/generated/
+/src/**
+/index.html

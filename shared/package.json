@@ -2,5 +2,15 @@
   "name": "@starship-arena/shared",
   "private": true,
   "version": "1.0.0",
-  "type": "module"
+  "type": "module",
+  "exports": {
+    "./types.ts": "./types.ts",
+    "./protocol/index.ts": "./protocol/index.ts",
+    "./codec/binary.ts": "./codec/binary.ts",
+    "./codec/json.ts": "./codec/json.ts",
+    "./sim/*.ts": "./sim/*.ts"
+  },
+  "dependencies": {
+    "zod": "^3.25.76"
+  }
 }
