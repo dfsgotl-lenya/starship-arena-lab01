@@ -1,4 +1,14 @@
-const DEFAULT_CODES = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyW", "KeyA", "KeyS", "KeyD", "KeyR"];
+const DEFAULT_CODES = [
+  "ArrowUp",
+  "ArrowDown",
+  "ArrowLeft",
+  "ArrowRight",
+  "KeyW",
+  "KeyA",
+  "KeyS",
+  "KeyD",
+  "KeyR",
+];
 
 export function createInput(target = window) {
   const down = new Set();

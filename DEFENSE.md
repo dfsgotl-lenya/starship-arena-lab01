@@ -1,39 +1,38 @@
-# Захист Lab 01 — 5 хвилин
+# Lab 05 — захист (5 хв)
 
-## 0:00–0:40 — Що зроблено
+1. Показати два вікна в одній кімнаті.
+2. Пояснити: клієнт передає `seq/thrust/turn/fire`, координати не передає.
+3. Показати `NETGRAPH`: RTT, snapshot age, bytes/s, pending, correction, interpolation.
+4. Утримувати W: корабель реагує одразу → це prediction.
+5. Увімкнути `latency=100&jitter=30&drop=2` і показати, що remote entities плавні через interpolation.
+6. Натиснути `Break determinism`: correction росте. Повернути `Fix determinism`.
+7. Натиснути `?protocol=json` та порівняти traffic із binary.
 
-«Моя тема — Starship Arena. Я зробив керований космічний корабель на Canvas. Архітектура розділена на `loop.js`, `input.js`, `sim/`, `render/` та `experiments/`. Це ES modules, а фізика не має залежностей від DOM.»
+### Reflection
 
-## 0:40–1:30 — Fixed timestep
+**1. Чому authoritative server?** Щоб клієнт не міг визначати істинний стан гри. Надсилання координат дозволило б підробити позицію й створювало б різні світи через drift/loss.
 
-«`requestAnimationFrame` запускає render перед paint. Я додаю elapsed time в accumulator, а потім роблю стільки кроків `1/60`, скільки накопичилося. Тому на 60 і 120 Hz кількість simulation steps за секунду залишається близько 60. `alpha` використовується для інтерполяції між `previous` і `current`. Delta обмежений 250 ms, щоб після великого зависання не виникало spiral of death.»
+**2. Від чого залежить prediction?** Від детермінізму спільної симуляції. Порушення видно за зростанням reconciliation correction.
 
-## 1:30–2:20 — Input + фізика
+**3. Як працює reconciliation?** Snapshot tick 100 із `lastProcessedSeq=57`: client ставить authoritative state, видаляє input `<=57`, потім повторно програє `58+` до поточного prediction tick.
 
-«`createInput()` — замикання. Set натиснутих клавіш закритий усередині функції. Зовнішній код отримує `isDown` і `justPressed`. `integrate(ship, input, dt)` працює тільки зі state, input та dt: поворот, thrust, drag і speed clamp. Після інтегрування корабель wrap-иться через межі арени.»
+**4. Навіщо interpolation у минулому?** Щоб мати дві точки для плавної інтерполяції. Компроміс: більше затримки → менше jitter.
 
-## 2:20–3:00 — Canvas + interpolation
+**5. Що таке lag compensation?** Сервер може враховувати історичний стан під час hit detection, бо клієнт бачить remote player із interpolation delay.
 
-«Canvas збільшується на `devicePixelRatio`, але малювання працює в CSS-пікселях через transform. При resize canvas налаштовується повторно. Корабель малюється через `translate` і `rotate`. Для кута я використовую найкоротшу різницю, тому перехід біля 0/360° не стрибає.»
+**6. DataView vs Float32Array?** `DataView` підходить для протоколу зі змішаними типами й явним endian. `Float32Array` зручний для однорідних локальних масивів.
 
-## 3:00–4:10 — Три експерименти
+# Lab 06 — захист TypeScript (5 хв)
 
-1. **100 ms busy-wait.** «Синхронний `while` блокує main thread. Поки callback не завершився, наступні JavaScript callbacks та rendering step не виконуються.»
+1. Запустити сервер і клієнт та відкрити гру у двох вікнах, як у Lab 5. Показати, що Canvas і мережевий режим працюють так само.
+2. Відкрити `shared/types.ts`: пояснити `EntityId`, `Tick` і `Seq`. Усі три значення є числами під час виконання, але бренди не дають переплутати їх під час компіляції.
+3. Показати `SnapshotEntity` і `ClientMessage`: поле `kind` або `type` допомагає TypeScript звузити тип у `switch`; `assertNever` ловить неповний обробник нового варіанта.
+4. Показати `ClientMessageSchema` та `parseClientMessage(unknown)`: типізація сама по собі не перевіряє мережеві байти, тому Zod перевіряє форму даних у runtime. Пошкоджений JSON повертає помилку розбору, сервер записує її в лог і закриває сокет.
+5. Показати `decodeInput` або `decodeSnapshot`: перевірки версії, довжини, кількості сутностей і числових діапазонів захищають від некоректного пакета.
+6. Запустити `npm run typecheck`, `npm test` і `npm run build`. Для демо помилки показати, що `Seq` не можна передати як `EntityId`, а `Map.get()` може повернути `undefined` і потребує перевірки.
 
-2. **setInterval(16).** «Timer не синхронізований з paint, тому має jitter/drift. Я вимірюю FPS та стандартне відхилення інтервалу за 10 секунд і перевіряю background tab.»
+### Reflection — короткі відповіді
 
-3. **Variable dt.** «У variable mode physics оновлюється один раз на кадр з реальним `dt`. При CPU throttling частота кадрів змінюється, отже змінюється й траєкторія. Fixed step прибирає залежність simulation від refresh rate.»
-
-## 4:10–5:00 — Типові питання
-
-**Чому Promise `.then()` виконується перед `setTimeout(..., 0)`?**
-
-«`.then()` додається в microtask queue, а timer — у task queue. Після синхронного коду microtasks очищуються раніше за наступну task.»
-
-**Що таке `alpha`?**
-
-«Це частка залишкового часу accumulator від одного fixed step: `alpha = accumulator / step`. Renderer змішує попередній і поточний state.»
-
-**Чому це важливо для multiplayer?**
-
-«Однаковий input + однакові fixed steps дають відтворювану simulation. Це основа для подальшого authoritative server і reconciliation.»
+- **Чому `unknown`, а не `any`?** `unknown` змушує перевірити значення перед використанням; `any` вимикає значну частину статичного контролю.
+- **Чому потрібен Zod, якщо є TypeScript?** Типи стираються під час збірки. Дані з WebSocket і `.env` надходять у runtime, тому їхню структуру й діапазони треба перевіряти насправді.
+- **Чому не додавали React/Vue/Svelte?** Canvas і fixed-step loop не залежать від DOM-фреймворку; для лобі й HUD наявних TypeScript-модулів достатньо, а ще одна UI-залежність не допомогла б протоколу чи симуляції.

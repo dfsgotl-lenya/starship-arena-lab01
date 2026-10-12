@@ -1,238 +1,242 @@
-# Lab 01 — The Event Loop Is the Game Loop
+# Lab 06 — TypeScript для протоколу та симуляції
 
 ## Starship Arena
 
-Індивідуальна лабораторна робота з курсу **JavaScript — Build a Multiplayer Browser Game**.
+Продовження лабораторних 1–5. Код симуляції, протоколу, сервера та клієнта переведено на TypeScript зі строгим контролем типів. Сама гра, Canvas і цикл симуляції лишилися без UI-фреймворку. У Lab 5 два клієнти грають через **authoritative Node.js server**. Клієнт передає тільки input (`thrust`, `turn`, `fire`), сервер є єдиним джерелом істини та надсилає snapshots зі швидкістю **30 Hz**.
 
-У цій роботі я створив браузерний прототип гри **Starship Arena** на **Vite + vanilla JavaScript + HTML5 Canvas 2D**. Реалізовано керування одним космічним кораблем, фізику його руху та ігровий цикл. Код фізики відокремлений від DOM і рендера, щоб у наступних лабораторних його можна було використати для multiplayer-версії.
+## Що зроблено
 
-## Мета роботи
+- створено спільний workspace `shared/` для симуляції та протоколу;
+- `shared/sim/integrate.ts` — детермінована фізика без DOM/Node API;
+- seeded PRNG (`mulberry32`) для однакового початкового світу;
+- серверний `Match` працює на 30 Hz через absolute-target `setTimeout`, без `setInterval`;
+- кожен input має `seq`, кожен snapshot містить `tick` і `lastProcessedSeq`;
+- сервер перевіряє input і ніколи не приймає координати від клієнта;
+- client-side prediction для власного корабля;
+- reconciliation: authoritative snapshot → видалення підтверджених input → повторне програвання pending input;
+- correction smoothing приблизно за 100 ms;
+- інтерполяція віддалених сутностей із регульованою затримкою;
+- локальні кулі показуються одразу, серверні замінюють їх після підтвердження;
+- штучні `latency`, `jitter`, `drop` через query-параметри WebSocket;
+- netgraph: RTT, snapshot age, bytes/s, pending inputs, correction magnitude, interpolation delay;
+- бінарний протокол через `ArrayBuffer`/`DataView`, little-endian, versioned, angle як `Int16` у тисячних радіана;
+- JSON залишено за прапорцем `?protocol=json` для порівняння;
+- round-trip тести для binary codec;
+- benchmark JSON vs binary;
+- `/api/stats` із tick rate, tick duration та jitter.
 
-Дослідити роботу JavaScript Event Loop та реалізувати ігровий цикл із фіксованим кроком симуляції.
-
-У роботі реалізовано:
-
-- `requestAnimationFrame` для рендера;
-- fixed timestep `1/60` с;
-- accumulator та інтерполяцію стану;
-- `createInput()` на основі замикання;
-- чисту функцію `integrate(ship, input, dt)` для фізики;
-- Canvas 2D з урахуванням `devicePixelRatio`;
-- загортання корабля через межі арени;
-- HUD із `STEPS/S`, `FRAMES/S` і тривалістю кадру;
-- три експерименти з навмисним погіршенням роботи циклу.
-
-## Технології
-
-- JavaScript (ES modules)
-- Vite
-- HTML5 Canvas 2D
-- ESLint
-- Prettier
-
-## Що було зроблено
-
-### 1. Ігровий цикл
-
-У `src/loop.js` реалізовано цикл на `requestAnimationFrame`. Час накопичується в `accumulator`, а симуляція виконується кроками однакової довжини:
-
-```js
-const STEP = 1 / 60;
-
-accumulator += Math.min((now - last) / 1000, 0.25);
-
-while (accumulator >= STEP) {
-  simulate(STEP);
-  accumulator -= STEP;
-}
-
-const alpha = accumulator / STEP;
-render(alpha);
-```
-
-Фізика працює з фіксованим `dt = 1/60`, незалежно від частоти оновлення монітора. Для відображення використовується інтерполяція між попереднім і поточним станом.
-
-### 2. Обробка клавіатури через closure
-
-У `src/input.js` створено `createInput()`. Натиснуті клавіші зберігаються у внутрішньому `Set`, доступ до якого мають тільки функція та повернені нею методи:
-
-```js
-isDown(code)
-justPressed(code)
-endFrame()
-```
-
-Таким способом реалізовано приватний стан обробника клавіатури.
-
-### 3. Фізика корабля
-
-У `src/sim/ship.js` реалізовано стан корабля:
+## Архітектура
 
 ```text
-x, y       — координати
-vx, vy     — швидкість
-angle      — кут повороту
-thrust     — стан тяги
+client/  ── input ──>  WebSocket  ──>  server/Match
+   │                                      │
+   │ <──── snapshots / 30 Hz ────────────┘
+   │
+   └── prediction + reconciliation + interpolation
+
+shared/
+├── types.ts              # EntityId / Tick / Seq + model
+├── sim/
+│   ├── integrate.ts
+│   ├── world.ts
+│   ├── entity.ts
+│   ├── collision.ts
+│   ├── vector.ts
+│   └── prng.ts
+├── codec/
+│   ├── binary.ts
+│   └── json.ts
+└── protocol/
+    └── index.ts           # Zod schemas + inferred message types
 ```
 
-Функція `integrate(ship, input, dt)` не залежить від DOM, Canvas чи UI. Вона виконує поворот, прискорення корабля, drag та обмеження максимальної швидкості.
+## Бінарний формат
 
-### 4. Арена і wrapping
-
-У `src/sim/arena.js` реалізовано загортання через межі арени. Якщо корабель виходить за одну межу, він з'являється з протилежного боку.
-
-### 5. Canvas і devicePixelRatio
-
-У `src/render/canvas.js` Canvas налаштовується відповідно до `devicePixelRatio`, щоб зображення залишалося чітким на дисплеях із високою щільністю пікселів. Також Canvas перебудовується при зміні розміру вікна.
-
-### 6. Рендер корабля
-
-У `src/render/draw.js` корабель малюється засобами Canvas 2D. Під час рендера використовується `alpha` для інтерполяції між двома станами симуляції.
-
-## Керування
-
-- `W` / `ArrowUp` — тяга;
-- `A` / `ArrowLeft` — поворот ліворуч;
-- `D` / `ArrowRight` — поворот праворуч.
-
-Корабель може безперервно літати по арені завдяки wrapping.
-
-## Експерименти
-
-### Experiment 1 — блокування 100 ms
-
-У цикл навмисно додано синхронний busy-wait приблизно на 100 ms.
-
-Результат:
-
-- виникають затримки кадрів;
-- `FRAME` збільшується;
-- `FRAMES/S` зменшується;
-- JavaScript на основному потоці не може виконати інший код, поки блокуючий цикл не завершиться.
-
-**Мої вимірювання:**
-
-| Показник | Результат |
-|---|---:|
-| frame-time під час блокування | 0.01 ms |
-| frames/s під час тесту | 129 fps |
-| кількість блокувань за 10 s | 24 |
-
-### Experiment 2 — setInterval замість rAF
-
-Для порівняння використано:
-
-```js
-setInterval(frame, 16);
-```
-
-Зібрано показники частоти кадрів та нерівномірності інтервалів.
-
-**Мої вимірювання:**
-
-| Показник | Результат |
-|---|---:|
-| `setInterval` FPS за 10 s | 62.5 fps |
-| jitter σ | 1.32 ms |
-| мінімальний інтервал | 10.90 ms |
-| максимальний інтервал | 20.70 ms |
-
-### Experiment 3 — variable timestep
-
-Порівняно два режими симуляції: variable timestep та fixed timestep `1/60`.
-
-Тест виконано без throttling і з CPU throttling `6×`.
-
-**Мої вимірювання координат після 5 s thrust:**
-
-| Режим | Без throttling | CPU 6× |
-|---|---:|---:|
-| Variable dt | 52, 350 | 45, 350 |
-| Fixed `1/60` s | 77, 350 | 921, 350 |
-
-Експеримент показує, що при variable timestep результат залежить від фактичного часу між кадрами, а fixed timestep відокремлює фізику від частоти рендера.
-
-## Event Loop
-
-Під час виконання роботи я дослідив взаємодію:
+Усі числові поля кодуються **little-endian**.
 
 ```text
-JavaScript code
-    ↓
-Call Stack
-    ↓
-Tasks / Microtasks
-    ↓
-requestAnimationFrame
-    ↓
-Render / Paint
+Input (12 bytes)
+0      version: Uint8
+1      type: Uint8 (1 = input)
+2..5   seq: Uint32
+6..9   tick: Uint32
+10     flags: bit0=thrust, bit1=fire
+11     turn: Int8 (-1/0/1)
 ```
 
-Це дозволило перевірити, чому блокуючий JavaScript зупиняє оновлення сторінки та чому `requestAnimationFrame` зручно використовувати для анімації.
-
-Приклад порядку виконання:
-
-```js
-console.log("1");
-
-setTimeout(() => console.log("2"), 0);
-
-Promise.resolve().then(() => console.log("3"));
-
-console.log("4");
-```
-
-Результат:
+Snapshot:
 
 ```text
-1
-4
-3
-2
+0      version: Uint8
+1      type: Uint8 (2 = snapshot)
+2..5   tick: Uint32
+6..7   entityCount: Uint16
+8..11  lastProcessedSeq: Uint32
+12..15 score: Int32
+16..   entities, 26 bytes each
 ```
 
-## Структура проєкту
+Для сутності: `id Uint16`, `kind Uint8`, flags, `ownerId Uint16`, `x/y/vx/vy Float32`, `angle Int16` у `rad × 1000`, `hp Uint16`.
+
+## Prediction / reconciliation
+
+Клієнт одразу застосовує власні input до локального корабля. Вони зберігаються у `pendingInputs`.
+
+Коли приходить snapshot:
+
+1. береться authoritative стан корабля;
+2. input із `seq <= lastProcessedSeq` видаляються;
+3. інші pending input повторно програються через ту саму `shared`-функцію `integrate`;
+4. різниця вимірюється як `correction magnitude`;
+5. візуальна поправка згладжується приблизно за 100 ms.
+
+Віддалені сутності малюються між двома останніми snapshots із затримкою інтерполяції.
+
+## Netgraph і тестування затримки
+
+Без затримки:
 
 ```text
-starship-arena-lab01/
-├── index.html
-├── package.json
-├── eslint.config.js
-├── .prettierrc.json
-├── .nvmrc
-├── README.md
-├── DEFENSE.md
-└── src/
-    ├── main.js
-    ├── loop.js
-    ├── input.js
-    ├── experiments/
-    │   └── experiments.js
-    ├── sim/
-    │   ├── ship.js
-    │   └── arena.js
-    └── render/
-        ├── canvas.js
-        └── draw.js
+http://localhost:5173/
 ```
+
+100 ms latency + 30 ms jitter + 2% packet loss:
+
+```text
+http://localhost:5173/?latency=100&jitter=30&drop=2
+```
+
+JSON замість binary:
+
+```text
+http://localhost:5173/?protocol=json
+```
+
+Можна комбінувати:
+
+```text
+http://localhost:5173/?protocol=json&latency=100&jitter=30&drop=2
+```
+
+На HUD відображаються `RTT`, `SNAP AGE`, `RX/TX`, `PENDING`, `CORRECTION`, `INTERP`.
+
+## Experiment — break determinism
+
+Кнопка **Break determinism** в netgraph вмикає спеціальний режим, де клієнтський `integrate` додає `Math.random()`, а сервер продовжує детерміновану версію. Через це `correction` починає зростати. Після натискання **Fix determinism** випадкова складова вимикається.
+
+## JSON vs binary measurements
+
+Запуск:
+
+```bash
+npm run bench:codec
+```
+
+Поточні шаблонні поля для власних вимірювань:
+
+| Codec               | Bytes/snapshot | KB/s per client (down) | KB/s per client (up) | Encode+decode µs |
+| ------------------- | -------------: | ---------------------: | -------------------: | ---------------: |
+| JSON                |            ___ |                    ___ |                  ___ |              ___ |
+| Binary (`DataView`) |            ___ |                    ___ |                  ___ |              ___ |
+
+## Network measurements
+
+Записи для звіту після двох вкладок:
+
+| Показник            | Без штучної затримки | 100 ms ± 30 ms, 2% drop |
+| ------------------- | -------------------: | ----------------------: |
+| RTT                 |               ___ ms |                  ___ ms |
+| snapshot age        |               ___ ms |                  ___ ms |
+| correction          |               ___ px |                  ___ px |
+| pending inputs      |                  ___ |                     ___ |
+| interpolation delay |               ___ ms |                  ___ ms |
+
+## GIF
+
+Записати **20 секунд двох вікон side-by-side** під час бою при `100 ms ± 30 ms` та `2% drop`, з netgraph. Після запису покласти GIF у `docs/two-player.gif` та залишити його на початку README перед цим заголовком.
 
 ## Запуск
 
-```bash
+```powershell
 npm install
-npm run dev
+Copy-Item .env.example .env
+npm run dev:server
 ```
 
-Перевірка:
+В іншому терміналі:
 
 ```bash
+npm run dev:client
+```
+
+Перевірки:
+
+```powershell
+npm run typecheck
+npm test
+npm run build
 npm run lint
 npm run format:check
-npm run build
 ```
+
+Серверні endpoints:
+
+```text
+GET /health
+GET /api/rooms
+GET /api/stats
+GET /api/replays
+GET /api/replays/<id>
+WS /ws
+```
+
+## Network write-up
+
+**Затримка.** Input і snapshots проходять через WebSocket, тому клієнт може отримувати authoritative state із затримкою. Prediction прибирає затримку для власного керування, а interpolation приховує стрибки віддалених сутностей.
+
+**Розбіжність стану.** Сервер використовує той самий deterministic `integrate`, тому в нормальному режимі correction у відкритому просторі має бути малою. Навмисний `Math.random()` показує, як швидко prediction починає розходитися.
+
+**Чіти.** Клієнт не надсилає `x/y`; він надсилає тільки input. Сервер сам рахує світ, тому зміна координат у DevTools не є джерелом істини.
+
+**Інтерполяція.** Обрано `100 ms` як стартове значення: це дає запас у кілька 30-Hz snapshots і зменшує видиму jitter-нестабільність, ціною перегляду віддалених сутностей трохи в минулому.
+
+## Lab 06 — що змінилося в TypeScript
+
+- Усі модулі `shared/`, `server/src/` і `client/src/` мають розширення `.ts`; клієнт і сервер перевіряються одним кореневим `tsconfig.json`.
+- Увімкнено `strict`, `noUncheckedIndexedAccess` і `useUnknownInCatchVariables`. `npm run typecheck` запускає `tsc --noEmit` і виконується в GitHub Actions.
+- Вектор `Vector2` має `readonly x` та `readonly y`. Моделі snapshots — об'єднання сутностей за `kind`; клієнтські повідомлення — об'єднання за `type`. У відповідних `switch` є `default` з `never`.
+- `EntityId`, `Tick` і `Seq` — branded-типи. У звичайному JavaScript це числа, але TypeScript не дозволяє випадково передати sequence number замість ID; функції-конструктори також перевіряють діапазони.
+- `ClientMessageSchema`, `ServerMessageSchema`, snapshot і конфігурація оточення перевіряються Zod у runtime. `parseClientMessage(unknown)` повертає типізований результат, не кидає помилку на зламаному JSON, а WebSocket-обробник записує відмову в лог і закриває з'єднання.
+- Бінарний decoder перевіряє версію, тип повідомлення, точну довжину, кількість сутностей, прапорці, допустимий напрямок руху й скінченність числових значень.
+- Події кімнати мають типізовані payload-и через `EventEmitter`; у браузері `Bus<Events>` пов'язує ім'я події з її payload. У `catch` помилки розглядаються як `unknown`.
+
+### Три важливі типи простими словами
+
+1. **Structural types** — важлива форма об'єкта, а не назва класу. Наприклад, функції, які рухають корабель, отримують об'єкт з потрібними полями корабля і стан керування.
+2. **Discriminated union** — об'єднання кількох форм, які мають спільний маркер. `kind: "ship" | "bullet" | "asteroid" | "pickup"` дозволяє TypeScript знати, що поле `hp` є в корабля, а `ownerId` — у кулі.
+3. **Branded types** — числа, які лишаються числами під час виконання, але мають різні типи на етапі компіляції. `EntityId`, `Tick` і `Seq` не можна плутати між собою.
+
+### Що допоміг виявити TypeScript
+
+Типи відокремлюють UUID гравця (`string`) від числового `EntityId` корабля. Під час reconciliation кулі потрібно зіставляти за `shipId`, а не за `playerId`: це різні ідентифікатори, попри те, що обидва стосуються одного гравця. Також `Map.get()` і доступ за індексом можуть повернути `undefined`; код перевіряє ці випадки замість неявно припускати, що елемент існує.
+
+### Чому без React / Vue / Svelte
+
+У цій лабораторній роботі фреймворк не додавався: основна складність — Canvas, цикл гри, симуляція й мережевий протокол. Вони залишаються незалежними від DOM-фреймворку, а невелике лобі та HUD вже достатньо описані TypeScript-модулями. Додавання фреймворку лише заради переходу на TypeScript збільшило б залежності без користі для симуляції.
+
+### Перевірка Lab 06
+
+```bash
+npm install
+npm run typecheck
+npm test
+npm run build
+npm run lint
+npm run format:check
+```
+
+CI автоматично запускає `npm run typecheck`, тести та збірку клієнта. Перед здачею потрібно виконати ці команди в локальному оточенні, перевірити гру за сценарієм Lab 5 і лише тоді поставити тег `lab-06`.
 
 ## Висновок
 
-У роботі я реалізував базовий ігровий цикл для браузерної гри та дослідив особливості виконання JavaScript через Event Loop. Було реалізовано fixed timestep, `requestAnimationFrame`, інтерполяцію, closure-based input, чисту фізику корабля, Canvas 2D та wrapping арени.
-
-Три експерименти дозволили на практиці перевірити вплив блокуючого коду, `setInterval` і variable timestep на роботу гри.
+У Lab 06 симуляція, сервер і клієнт переведені на TypeScript. Статичні типи відсікають частину помилок під час збірки, а Zod продовжує перевіряти мережеві дані та змінні оточення під час виконання. Авторитетна серверна симуляція, prediction, reconciliation, interpolation і binary `DataView` збережені; Canvas та ігровий цикл не залежать від UI-фреймворку.

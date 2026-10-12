@@ -1,20 +1,33 @@
 {
-  "name": "starship-arena-lab01",
-  "private": true,
+  "name": "starship-arena",
   "version": "1.0.0",
+  "private": true,
   "type": "module",
+  "workspaces": [
+    "client",
+    "server",
+    "shared"
+  ],
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "lint": "eslint .",
+    "dev:client": "npm run dev --workspace client",
+    "dev:server": "node --env-file=.env --import tsx --watch server/src/index.ts",
+    "start": "node --env-file=.env --import tsx server/src/index.ts",
+    "build": "npm run typecheck && npm run build --workspace client",
+    "bench:codec": "tsx server/scripts/codec-benchmark.js",
+    "lint": "npm run typecheck && eslint eslint.config.js client/vite.config.js server/test server/scripts",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "test": "npm test --workspace server",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@eslint/js": "^9.19.0",
-    "eslint": "^9.19.0",
-    "prettier": "^3.5.3",
-    "vite": "^6.1.0"
+    "@eslint/js": "^9.35.0",
+    "@types/node": "^22.18.6",
+    "@types/ws": "^8.18.1",
+    "eslint": "^9.35.0",
+    "prettier": "^3.6.2",
+    "tsx": "^4.20.5",
+    "typescript": "^5.8.3",
+    "vite": "^7.1.5"
   }
 }

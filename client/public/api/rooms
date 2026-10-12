@@ -1,0 +1,7 @@
+{
+  "rooms": [
+    { "id": "alpha", "name": "Alpha Dogfight", "players": 2, "capacity": 8, "arena": { "asteroidCount": 7, "homingEvery": 5, "asteroidSpeedMin": 30, "asteroidSpeedMax": 70 } },
+    { "id": "nebula", "name": "Nebula Run", "players": 4, "capacity": 8, "arena": { "asteroidCount": 11, "homingEvery": 4, "asteroidSpeedMin": 40, "asteroidSpeedMax": 95 } },
+    { "id": "rookie", "name": "Rookie Ring", "players": 1, "capacity": 4, "arena": { "asteroidCount": 5, "homingEvery": 99, "asteroidSpeedMin": 25, "asteroidSpeedMax": 55 } }
+  ]
+}

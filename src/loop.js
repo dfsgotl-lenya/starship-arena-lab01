@@ -83,7 +83,6 @@ export function createLoop({ step = DEFAULT_STEP, simulate, render }) {
   };
 }
 
-
 export function createVariableLoop({ simulate, render }) {
   let running = false;
   let rafId = 0;

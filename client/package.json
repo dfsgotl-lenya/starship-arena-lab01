@@ -1,0 +1,14 @@
+{
+  "name": "@starship-arena/client",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@starship-arena/shared": "file:../shared",
+    "zod": "^3.25.76"
+  }
+}

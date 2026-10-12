@@ -5,7 +5,7 @@ function lerp(a, b, alpha) {
 }
 
 function shortestAngleDelta(a, b) {
-  let delta = (b - a + Math.PI) % TAU - Math.PI;
+  let delta = ((b - a + Math.PI) % TAU) - Math.PI;
   if (delta < -Math.PI) delta += TAU;
   return delta;
 }
@@ -55,7 +55,8 @@ export function drawBackground(ctx, width, height, timeSeconds, stars) {
 
   ctx.save();
   for (const star of stars) {
-    const twinkle = 0.55 + Math.sin(timeSeconds * star.speed + star.phase) * 0.25;
+    const twinkle =
+      0.55 + Math.sin(timeSeconds * star.speed + star.phase) * 0.25;
     ctx.globalAlpha = twinkle;
     ctx.fillStyle = "#d9f6ff";
     ctx.fillRect(star.x * width, star.y * height, star.size, star.size);

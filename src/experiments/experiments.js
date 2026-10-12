@@ -17,9 +17,11 @@ export function createIntervalExperiment({ onProgress, onComplete }) {
     if (samples.length === 0) return null;
 
     const elapsedMs = Math.max(1, endTime - startTime);
-    const mean = samples.reduce((sum, value) => sum + value, 0) / samples.length;
+    const mean =
+      samples.reduce((sum, value) => sum + value, 0) / samples.length;
     const variance =
-      samples.reduce((sum, value) => sum + (value - mean) ** 2, 0) / samples.length;
+      samples.reduce((sum, value) => sum + (value - mean) ** 2, 0) /
+      samples.length;
 
     return {
       callbacks: samples.length,

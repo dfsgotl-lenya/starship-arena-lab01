@@ -61,8 +61,18 @@ export function wrapShip(ship, width, height) {
   const margin = 24;
   return {
     ...ship,
-    x: ship.x < -margin ? width + margin : ship.x > width + margin ? -margin : ship.x,
-    y: ship.y < -margin ? height + margin : ship.y > height + margin ? -margin : ship.y,
+    x:
+      ship.x < -margin
+        ? width + margin
+        : ship.x > width + margin
+          ? -margin
+          : ship.x,
+    y:
+      ship.y < -margin
+        ? height + margin
+        : ship.y > height + margin
+          ? -margin
+          : ship.y,
   };
 }
 
