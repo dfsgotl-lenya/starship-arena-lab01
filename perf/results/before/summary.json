@@ -1,0 +1,223 @@
+{
+  "label": "before",
+  "seconds": 30,
+  "bots": 8,
+  "date": "2026-10-16T20:58:45.886Z",
+  "chromium": "141.0.7390.37",
+  "frames": {
+    "frames": 1796,
+    "workP50": 0.7000000000698492,
+    "workP95": 2,
+    "workP99": 4.200000000069849,
+    "workMax": 8.600000000093132,
+    "intervalP50": 16.699999999953434,
+    "intervalP95": 20,
+    "intervalP99": 26.900000000023283,
+    "intervalMax": 45.90000000002328,
+    "longFrames": 73
+  },
+  "gc": {
+    "minor": {
+      "count": 24,
+      "totalMs": 339.16,
+      "maxMs": 25.18,
+      "p95Ms": 22.07,
+      "over4ms": 23
+    },
+    "major": {
+      "count": 21,
+      "totalMs": 119.07,
+      "maxMs": 10.93,
+      "p95Ms": 10.32,
+      "over4ms": 15
+    }
+  },
+  "heap": {
+    "minMb": 3.3795204162597656,
+    "maxMb": 29.776161193847656,
+    "avgEntities": 83.60431654676259
+  },
+  "server": {
+    "tickP50Ms": 0.33,
+    "tickP95Ms": 0.54,
+    "tickP99Ms": 1.23,
+    "tickMaxMs": 2.98,
+    "stepMsAvg": 0.29,
+    "jitterMs": 0.6
+  },
+  "allocators": [
+    {
+      "fn": "_parse index-twTwzmfZ.js:2570",
+      "MB": 231.93,
+      "KB/s": 7916.52,
+      "share": "37.76%"
+    },
+    {
+      "fn": "_parse index-twTwzmfZ.js:3641",
+      "MB": 145.52,
+      "KB/s": 4967.24,
+      "share": "23.69%"
+    },
+    {
+      "fn": "push",
+      "MB": 41.48,
+      "KB/s": 1415.74,
+      "share": "6.75%"
+    },
+    {
+      "fn": "render index-twTwzmfZ.js:5280",
+      "MB": 32.53,
+      "KB/s": 1110.39,
+      "share": "5.3%"
+    },
+    {
+      "fn": "_parse index-twTwzmfZ.js:1766",
+      "MB": 29.11,
+      "KB/s": 993.75,
+      "share": "4.74%"
+    },
+    {
+      "fn": "(anonymous) index-twTwzmfZ.js:5433",
+      "MB": 28.15,
+      "KB/s": 960.73,
+      "share": "4.58%"
+    },
+    {
+      "fn": "_parse index-twTwzmfZ.js:3016",
+      "MB": 26.82,
+      "KB/s": 915.62,
+      "share": "4.37%"
+    },
+    {
+      "fn": "decodeSnapshot index-twTwzmfZ.js:4646",
+      "MB": 20.44,
+      "KB/s": 697.85,
+      "share": "3.33%"
+    },
+    {
+      "fn": "_processInputParams index-twTwzmfZ.js:859",
+      "MB": 11.57,
+      "KB/s": 394.78,
+      "share": "1.88%"
+    },
+    {
+      "fn": "_parse index-twTwzmfZ.js:2164",
+      "MB": 6.03,
+      "KB/s": 205.97,
+      "share": "0.98%"
+    },
+    {
+      "fn": "set",
+      "MB": 5.91,
+      "KB/s": 201.77,
+      "share": "0.96%"
+    },
+    {
+      "fn": "(anonymous) index-twTwzmfZ.js:5426",
+      "MB": 5.7,
+      "KB/s": 194.55,
+      "share": "0.93%"
+    },
+    {
+      "fn": "(anonymous) index-twTwzmfZ.js:2489",
+      "MB": 5.25,
+      "KB/s": 179.2,
+      "share": "0.85%"
+    },
+    {
+      "fn": "next",
+      "MB": 5.05,
+      "KB/s": 172.42,
+      "share": "0.82%"
+    },
+    {
+      "fn": "_parse index-twTwzmfZ.js:3471",
+      "MB": 3.18,
+      "KB/s": 108.53,
+      "share": "0.52%"
+    },
+    {
+      "fn": "TOTAL",
+      "MB": 614.21,
+      "KB/s": 20964.91,
+      "share": "100%"
+    }
+  ],
+  "hot": [
+    {
+      "fn": "(garbage collector)",
+      "ms": 676.32,
+      "share": "2.25%"
+    },
+    {
+      "fn": "_parse index-twTwzmfZ.js:2570",
+      "ms": 663.93,
+      "share": "2.21%"
+    },
+    {
+      "fn": "_parse index-twTwzmfZ.js:3641",
+      "ms": 509.99,
+      "share": "1.7%"
+    },
+    {
+      "fn": "_parse index-twTwzmfZ.js:3016",
+      "ms": 256.94,
+      "share": "0.85%"
+    },
+    {
+      "fn": "drawImage",
+      "ms": 245.59,
+      "share": "0.82%"
+    },
+    {
+      "fn": "interpolateSnapshots index-twTwzmfZ.js:5405",
+      "ms": 204.66,
+      "share": "0.68%"
+    },
+    {
+      "fn": "_parse index-twTwzmfZ.js:1766",
+      "ms": 149.19,
+      "share": "0.5%"
+    },
+    {
+      "fn": "send",
+      "ms": 146.32,
+      "share": "0.49%"
+    },
+    {
+      "fn": "update index-twTwzmfZ.js:4581",
+      "ms": 124.02,
+      "share": "0.41%"
+    },
+    {
+      "fn": "save",
+      "ms": 115.98,
+      "share": "0.39%"
+    },
+    {
+      "fn": "fillRect",
+      "ms": 85.79,
+      "share": "0.29%"
+    },
+    {
+      "fn": "render index-twTwzmfZ.js:5280",
+      "ms": 81.33,
+      "share": "0.27%"
+    },
+    {
+      "fn": "drawBackground index-twTwzmfZ.js:216",
+      "ms": 71.13,
+      "share": "0.24%"
+    },
+    {
+      "fn": "(anonymous) index-twTwzmfZ.js:5433",
+      "ms": 69.69,
+      "share": "0.23%"
+    },
+    {
+      "fn": "decodeSnapshot index-twTwzmfZ.js:4646",
+      "ms": 61.11,
+      "share": "0.2%"
+    }
+  ]
+}

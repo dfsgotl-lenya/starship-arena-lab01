@@ -37,6 +37,9 @@ export class World {
   readonly scores = new Map<EntityId, number>();
   events: WorldEvent[] = [];
   respawns: RespawnEntry[] = [];
+  /** Gameplay RNG (asteroid refills); seeded, so the step stays deterministic. */
+  #rng = mulberry32(1);
+  #asteroidTimer = 0;
 
   constructor({
     width = 960,
@@ -48,6 +51,20 @@ export class World {
     this.height = height;
     this.seed = seed >>> 0;
     this.arena = { ...arena };
+    this.#rng = mulberry32(this.seed ^ 0x9e3779b9);
+  }
+
+  /**
+   * Allocates a uint16 entity id. Ids wrap after 65535 and skip ids that are
+   * still alive, so a long match never overflows the binary protocol.
+   */
+  allocateId(): EntityId {
+    for (let attempts = 0; attempts < 0xffff; attempts += 1) {
+      if (this.nextId > 0xffff || this.nextId < 1) this.nextId = 1;
+      const candidate = entityId(this.nextId++);
+      if (!this.entities.has(candidate)) return candidate;
+    }
+    throw new RangeError("no free entity ids");
   }
 
   add<T extends Entity>(entity: T): T {
@@ -66,7 +83,7 @@ export class World {
   }
 
   spawnBullet(ownerId: EntityId, ship: Parameters<typeof createBullet>[2]) {
-    const bullet = createBullet(entityId(this.nextId++), ownerId, ship);
+    const bullet = createBullet(this.allocateId(), ownerId, ship);
     return this.add(bullet);
   }
 
@@ -78,6 +95,8 @@ export class World {
     this.entities.clear();
     this.events = [];
     this.respawns = [];
+    this.#rng = mulberry32(this.seed ^ 0x9e3779b9);
+    this.#asteroidTimer = 0;
   }
 
   seedArena(config: ArenaConfig = this.arena): void {
@@ -99,7 +118,7 @@ export class World {
       const radius = 22 + rng() * 18;
       this.add(
         createAsteroid(
-          entityId(this.nextId++),
+          this.allocateId(),
           x,
           y,
           Math.cos(angle) * speed,
@@ -152,6 +171,47 @@ export class World {
     resolveCollisions(this);
     this.#sweep();
     this.#processRespawns();
+    this.#refillAsteroids(dt);
+  }
+
+  /** Destroyed asteroids come back from the arena edge, one every 1.5 s. */
+  #refillAsteroids(dt: number): void {
+    const target = this.arena.asteroidCount ?? 0;
+    if (target <= 0) return;
+    let alive = 0;
+    for (const entity of this.entities.values())
+      if (entity.kind === "asteroid") alive += 1;
+    if (alive >= target) {
+      this.#asteroidTimer = 0;
+      return;
+    }
+    this.#asteroidTimer += dt;
+    if (this.#asteroidTimer < 1.5) return;
+    this.#asteroidTimer = 0;
+    const rng = this.#rng;
+    const minSpeed = this.arena.asteroidSpeedMin ?? 30;
+    const maxSpeed = this.arena.asteroidSpeedMax ?? 80;
+    const edge = Math.floor(rng() * 4);
+    const along = rng();
+    const x = edge === 0 ? 0 : edge === 1 ? this.width - 1 : along * this.width;
+    const y =
+      edge === 2 ? 0 : edge === 3 ? this.height - 1 : along * this.height;
+    const angle = rng() * Math.PI * 2;
+    const speed = minSpeed + rng() * (maxSpeed - minSpeed);
+    const homingEvery = Math.max(1, this.arena.homingEvery ?? 4);
+    const variant = Math.floor(rng() * 4);
+    this.add(
+      createAsteroid(
+        this.allocateId(),
+        x,
+        y,
+        Math.cos(angle) * speed,
+        Math.sin(angle) * speed,
+        22 + rng() * 18,
+        variant % homingEvery === 0,
+        variant,
+      ),
+    );
   }
 
   scheduleRespawn(playerId: EntityId): void {

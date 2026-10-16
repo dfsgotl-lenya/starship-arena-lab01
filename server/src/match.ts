@@ -3,7 +3,6 @@ import { World, deterministicSeed } from "@starship-arena/shared/sim/world.ts";
 import {
   sequenceNumber,
   tickNumber,
-  entityId,
 } from "@starship-arena/shared/types.ts";
 import type { EntityId, InputPacket } from "@starship-arena/shared/types.ts";
 import type { ServerConfig } from "./config.ts";
@@ -31,6 +30,11 @@ export class Match {
   #jitterMs = 0;
   #previousTickAt = 0;
   #tickCount = 0;
+  #spawnCounter = 0;
+  #lastStepDuration = 0;
+  readonly #tickSamples = new Float64Array(300);
+  #tickSampleIndex = 0;
+  #tickSampleCount = 0;
   readonly seed: number;
 
   constructor(room: Room, config: ServerConfig) {
@@ -52,6 +56,8 @@ export class Match {
       tickRate: this.#config.tickRate,
       tickCount: this.#tickCount,
       tickDurationMs: this.#lastTickDuration,
+      stepDurationMs: this.#lastStepDuration,
+      ...this.tickPercentiles(),
       tickJitterMs: this.#jitterMs,
       players: this.#players.size,
       seed: this.seed,
@@ -59,14 +65,15 @@ export class Match {
   }
 
   addPlayer(player: RoomPlayer) {
-    const spawnX =
-      this.#players.size === 0
-        ? this.#world.width * 0.25
-        : this.#world.width * 0.75;
+    const spawn = spawnPoint(
+      this.#spawnCounter++,
+      this.#world.width,
+      this.#world.height,
+    );
     const ship = this.#world.addShip(
-      entityId(this.#world.nextId++),
-      spawnX,
-      this.#world.height / 2,
+      this.#world.allocateId(),
+      spawn.x,
+      spawn.y,
     );
     player.shipId = ship.id;
     this.#players.set(player.id, {
@@ -106,6 +113,33 @@ export class Match {
     state.pending.push(input);
     if (state.pending.length > 8)
       state.pending.splice(0, state.pending.length - 8);
+  }
+
+  /** p50/p95/p99/max of the last 300 full ticks (≈10 s at 30 Hz). */
+  tickPercentiles(): {
+    tickP50Ms: number;
+    tickP95Ms: number;
+    tickP99Ms: number;
+    tickMaxMs: number;
+  } {
+    const count = this.#tickSampleCount;
+    if (count === 0)
+      return { tickP50Ms: 0, tickP95Ms: 0, tickP99Ms: 0, tickMaxMs: 0 };
+    const sorted = this.#tickSamples.slice(0, count).sort();
+    const at = (q: number) =>
+      sorted[Math.min(count - 1, Math.floor(q * (count - 1)))] ?? 0;
+    return {
+      tickP50Ms: at(0.5),
+      tickP95Ms: at(0.95),
+      tickP99Ms: at(0.99),
+      tickMaxMs: sorted[count - 1] ?? 0,
+    };
+  }
+
+  #recordTick(ms: number): void {
+    this.#tickSamples[this.#tickSampleIndex] = ms;
+    this.#tickSampleIndex = (this.#tickSampleIndex + 1) % this.#tickSamples.length;
+    if (this.#tickSampleCount < this.#tickSamples.length) this.#tickSampleCount += 1;
   }
 
   start(): void {
@@ -153,7 +187,7 @@ export class Match {
     }
     this.#world.step(1 / this.#config.tickRate, inputs);
     this.#tickCount += 1;
-    this.#lastTickDuration = performance.now() - start;
+    this.#lastStepDuration = performance.now() - start;
     const snapshot = this.#world.snapshot();
     for (const state of this.#players.values()) {
       const payload: SnapshotPayload = {
@@ -164,9 +198,28 @@ export class Match {
       };
       state.player.net.sendSnapshot?.(payload, this.#config);
     }
+    // Tick duration = simulation step + snapshot fan-out (what a load test cares about).
+    this.#lastTickDuration = performance.now() - start;
+    this.#recordTick(this.#lastTickDuration);
     this.#nextTarget += this.#tickMs;
     if (this.#nextTarget < performance.now() - this.#tickMs * 4)
       this.#nextTarget = performance.now() + this.#tickMs;
     this.#schedule();
   }
+}
+
+/** Deterministic spawn points: the first two match Lab 5, the rest spiral around the centre. */
+export function spawnPoint(
+  index: number,
+  width: number,
+  height: number,
+): { x: number; y: number } {
+  if (index === 0) return { x: width * 0.25, y: height / 2 };
+  if (index === 1) return { x: width * 0.75, y: height / 2 };
+  const angle = index * 2.399963229728653;
+  const radius = Math.min(width, height) * 0.38;
+  return {
+    x: width / 2 + Math.cos(angle) * radius,
+    y: height / 2 + Math.sin(angle) * radius,
+  };
 }

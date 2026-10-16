@@ -27,6 +27,7 @@ export interface VariableLoopStats {
 }
 export interface LoopOptions {
   readonly step?: number;
+  readonly recorder?: import("./perf.ts").FrameRecorder;
   readonly simulate: (dt: number) => void;
   readonly render: (alpha: number, stats: LoopStats) => void;
 }

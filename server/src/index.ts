@@ -22,6 +22,13 @@ await mkdir(logDir, { recursive: true });
 const roomManager = new RoomManager(config);
 const flakyAttempts = new Map<string, number>();
 roomManager.on("error", (error) => console.error("[room-manager]", error));
+if (config.bots > 0) {
+  const botRoom = roomManager.get(config.botRoom);
+  if (botRoom) {
+    botRoom.addBots(config.bots);
+    console.log(`[server] ${config.bots} bots in room ${botRoom.id}`);
+  }
+}
 
 const MIME = new Map<string, string>([
   [".html", "text/html; charset=utf-8"],
@@ -178,6 +185,22 @@ const server = createServer(async (req, res) => {
           error: errorMessage(error),
         });
       }
+    }
+
+    const botsMatch = /^\/api\/rooms\/([^/]+)\/bots$/.exec(url.pathname);
+    if (botsMatch && (req.method === "POST" || req.method === "DELETE")) {
+      const room = roomManager.get(decodeURIComponent(botsMatch[1] ?? ""));
+      if (!room) return json(res, 404, { error: "room not found" });
+      if (req.method === "DELETE") {
+        room.removeBots();
+        return json(res, 200, { bots: room.botCount });
+      }
+      const count = Math.max(
+        1,
+        Math.min(32, Number(url.searchParams.get("count") ?? 1) || 1),
+      );
+      room.addBots(count);
+      return json(res, 201, { bots: room.botCount });
     }
 
     if (req.method === "GET" && url.pathname === "/api/flaky") {

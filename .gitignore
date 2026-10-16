@@ -13,3 +13,8 @@ client/dist/
 node_modules/
 logs/
 .env
+perf/results/*/logs/
+perf/results/*/allocations.heapprofile
+perf/results/smoke/
+test-results/
+playwright-report/

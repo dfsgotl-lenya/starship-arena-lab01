@@ -4,6 +4,7 @@ import type { WebSocket } from "ws";
 import type { ArenaConfig } from "@starship-arena/shared/types.ts";
 import { MatchLog } from "./log/matchlog.ts";
 import { Match } from "./match.ts";
+import { BotBrain } from "./bots.ts";
 import type { ServerConfig } from "./config.ts";
 import type { RoomPlayer } from "./types.ts";
 
@@ -61,13 +62,24 @@ export interface RoomInfo {
   readonly id: string;
   readonly name: string;
   readonly players: number;
+  readonly bots: number;
   readonly capacity: number;
   readonly arena: ArenaConfig;
   readonly replayId: string | undefined;
 }
 
+/** Bots have no transport; a CLOSED socket makes every broadcast skip them. */
+const BOT_SOCKET = Object.freeze({
+  readyState: 3,
+  bufferedAmount: 0,
+  send: () => undefined,
+  close: () => undefined,
+}) as unknown as WebSocket;
+
 export class Room extends EventEmitter<RoomEvents> {
   readonly #players = new Map<string, RoomPlayer>();
+  readonly #bots = new Map<string, RoomPlayer>();
+  #botCounter = 0;
   readonly #log: MatchLog;
   #closed = false;
   readonly id: string;
@@ -131,8 +143,44 @@ export class Room extends EventEmitter<RoomEvents> {
     this.#players.delete(playerId);
     this.match.removePlayer(playerId);
     this.#emitEvent("leave", { player: { id: player.id, name: player.name } });
-    if (this.#players.size === 0) this.emit("empty");
+    if (this.#players.size === 0 && this.#bots.size === 0) this.emit("empty");
     return player;
+  }
+
+  /**
+   * Adds server-side bots. Each bot is a regular match player whose input goes
+   * through `match.handleInput`, the same entry point the WebSocket layer uses
+   * for humans. Bots do not count against the human capacity.
+   */
+  addBots(count: number): string[] {
+    const ids: string[] = [];
+    for (let index = 0; index < count; index += 1) {
+      this.#botCounter += 1;
+      const number = this.#botCounter;
+      const brain = new BotBrain(0xb07 + number * 7919);
+      const player: RoomPlayer = {
+        id: `bot-${this.id}-${number}`,
+        name: `bot-${number}`,
+        socket: BOT_SOCKET,
+        net: { protocol: "binary" },
+      };
+      player.net.sendSnapshot = (snapshot) => {
+        this.match.handleInput(player.id, brain.decide(snapshot, player.shipId));
+      };
+      this.#bots.set(player.id, player);
+      this.match.addPlayer(player);
+      ids.push(player.id);
+    }
+    return ids;
+  }
+
+  removeBots(): void {
+    for (const id of this.#bots.keys()) this.match.removePlayer(id);
+    this.#bots.clear();
+  }
+
+  get botCount(): number {
+    return this.#bots.size;
   }
 
   chat(player: RoomPlayer, text: string): void {
@@ -150,7 +198,7 @@ export class Room extends EventEmitter<RoomEvents> {
   }
 
   roster(): Array<{ id: string; name: string }> {
-    return [...this.#players.values()].map((player) => ({
+    return [...this.#players.values(), ...this.#bots.values()].map((player) => ({
       id: player.id,
       name: player.name,
     }));
@@ -207,6 +255,7 @@ export class RoomManager extends EventEmitter<RoomManagerEvents> {
       id: room.id,
       name: room.name,
       players: room.playerCount,
+      bots: room.botCount,
       capacity: room.capacity,
       arena: room.arena,
       replayId: room.replayId,
@@ -216,15 +265,7 @@ export class RoomManager extends EventEmitter<RoomManagerEvents> {
   get(id: string): Room | undefined {
     return this.#rooms.get(id);
   }
-  stats(): Array<{
-    room: string;
-    tickRate: number;
-    tickCount: number;
-    tickDurationMs: number;
-    tickJitterMs: number;
-    players: number;
-    seed: number;
-  }> {
+  stats(): Array<{ room: string } & Match["stats"]> {
     return [...this.#rooms.values()].map((room) => ({
       room: room.id,
       ...room.match.stats,

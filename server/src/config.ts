@@ -5,7 +5,7 @@ const EnvironmentSchema = z.object({
   HOST: z.string().min(1).default("127.0.0.1"),
   LOG_DIR: z.string().min(1).default("./logs"),
   MAX_ROOMS: z.coerce.number().int().min(1).max(100).default(12),
-  ROOM_CAPACITY: z.coerce.number().int().min(1).max(64).default(8),
+  ROOM_CAPACITY: z.coerce.number().int().min(1).max(256).default(8),
   MAX_PAYLOAD: z.coerce.number().int().min(256).max(1_000_000).default(4096),
   MESSAGE_RATE: z.coerce.number().int().min(1).max(1000).default(8),
   HEARTBEAT_MS: z.coerce.number().int().min(1000).max(120_000).default(15_000),
@@ -19,6 +19,8 @@ const EnvironmentSchema = z.object({
   NET_LATENCY_MS: z.coerce.number().int().min(0).max(5000).default(0),
   NET_JITTER_MS: z.coerce.number().int().min(0).max(5000).default(0),
   NET_DROP_PCT: z.coerce.number().int().min(0).max(100).default(0),
+  BOTS: z.coerce.number().int().min(0).max(128).default(0),
+  BOT_ROOM: z.string().min(1).default("alpha"),
 });
 
 export type ServerConfig = {
@@ -35,6 +37,8 @@ export type ServerConfig = {
   readonly netLatencyMs: number;
   readonly netJitterMs: number;
   readonly netDropPct: number;
+  readonly bots: number;
+  readonly botRoom: string;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
@@ -53,5 +57,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     netLatencyMs: values.NET_LATENCY_MS,
     netJitterMs: values.NET_JITTER_MS,
     netDropPct: values.NET_DROP_PCT,
+    bots: values.BOTS,
+    botRoom: values.BOT_ROOM,
   } satisfies ServerConfig);
 }

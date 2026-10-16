@@ -12,6 +12,7 @@ export function createLoop({
   step = DEFAULT_STEP,
   simulate,
   render,
+  recorder,
 }: LoopOptions) {
   let running = false;
   let rafId = 0;
@@ -36,6 +37,7 @@ export function createLoop({
   const frame = (now: number): void => {
     if (!running) return;
     const start = window.performance.now();
+    recorder?.mark("frame-start");
     if (lastTime === 0) lastTime = now;
     const delta = Math.min((now - lastTime) / 1000, MAX_FRAME_DELTA);
     lastTime = now;
@@ -63,7 +65,15 @@ export function createLoop({
     stats.frameTimeMs = frameTimeMs;
     stats.totalSteps = totalSteps;
     stats.totalFrames = totalFrames;
+    recorder?.mark("simulate-end");
     render(accumulator / step, stats);
+    if (recorder) {
+      recorder.mark("frame-end");
+      recorder.measure("simulate", "frame-start", "simulate-end");
+      recorder.measure("render", "simulate-end", "frame-end");
+      recorder.measure("frame", "frame-start", "frame-end");
+      recorder.record(start, window.performance.now() - start);
+    }
     rafId = window.requestAnimationFrame(frame);
   };
 

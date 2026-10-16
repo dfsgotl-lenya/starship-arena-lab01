@@ -18,6 +18,7 @@ import { Bus } from "./events.ts";
 import type { GameEvents } from "./events.ts";
 import type { LoopStats, RenderWorld } from "./types.ts";
 import { ServerMessageSchema } from "@starship-arena/shared/protocol/index.ts";
+import { FrameRecorder } from "./perf.ts";
 
 interface AppDom extends HudElements {
   readonly loading: HTMLElement;
@@ -115,6 +116,15 @@ const stars = Array.from({ length: 120 }, (_, index) => ({
   phase: index * 0.37,
 }));
 const hud = createHud(dom, events);
+const pageParams = new URLSearchParams(window.location.search);
+const recorder = new FrameRecorder(pageParams.get("perf") === "1");
+let lastEntityCount = 0;
+window.__perf = {
+  recorder,
+  start: () => recorder.start(),
+  stop: () => recorder.stop(),
+  entities: () => lastEntityCount,
+};
 let assets: LoadedAssets | null = null;
 let loop: ReturnType<typeof createLoop> | null = null;
 let currentPlayerName = "Pilot";
@@ -193,6 +203,7 @@ function startNetworkGame(): void {
   loop?.stop();
   loop = createLoop({
     step: 1 / 60,
+    recorder,
     simulate(dt) {
       netGame?.step(dt);
       input.endFrame();
@@ -219,6 +230,7 @@ function startNetworkGame(): void {
         canvasApi.size.height,
       );
       if (assets) drawWorld(canvasApi.ctx, renderState, alpha, assets);
+      lastEntityCount = renderState.entities.length;
       hud.update(stats, renderState);
       updateNetgraph();
     },
