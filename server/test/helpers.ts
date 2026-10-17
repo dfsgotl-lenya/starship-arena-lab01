@@ -1,6 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { loadConfig } from "../src/config.ts";
 import type { ServerConfig } from "../src/config.ts";
 import type {
   RoomPlayer,
@@ -13,22 +14,10 @@ export function testConfig(
   overrides: Partial<ServerConfig> = {},
 ): ServerConfig {
   return {
+    ...loadConfig({ NODE_ENV: "test" }),
     port: 0,
-    host: "127.0.0.1",
     logDir: mkdtempSync(path.join(tmpdir(), "starship-test-")),
-    maxRooms: 12,
-    roomCapacity: 8,
-    maxPayload: 4096,
-    messageRate: 60,
     heartbeatMs: 60_000,
-    slowClientBytes: 65_536,
-    tickRate: 30,
-    netLatencyMs: 0,
-    netJitterMs: 0,
-    netDropPct: 0,
-    bots: 0,
-    botRoom: "alpha",
-    broadphase: "hash",
     ...overrides,
   };
 }

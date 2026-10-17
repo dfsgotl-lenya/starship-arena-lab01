@@ -63,6 +63,18 @@ export default tseslint.config(
     },
   },
   {
+    files: ["client/public/sw.js"],
+    languageOptions: {
+      globals: {
+        self: "readonly",
+        caches: "readonly",
+        fetch: "readonly",
+        Response: "readonly",
+        URL: "readonly",
+      },
+    },
+  },
+  {
     files: ["**/*.js", "**/*.mjs"],
     languageOptions: {
       ecmaVersion: "latest",

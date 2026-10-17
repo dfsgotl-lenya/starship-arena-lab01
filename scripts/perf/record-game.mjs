@@ -52,7 +52,7 @@ const server = spawn(
 process.on("exit", () => server.kill("SIGTERM"));
 await new Promise((resolve, reject) => {
   server.stdout.on("data", (chunk) => {
-    if (String(chunk).includes("[server] http")) resolve();
+    if (String(chunk).includes("server.listening")) resolve();
   });
   server.once("exit", (code) => reject(new Error(`server exited ${code}`)));
 });

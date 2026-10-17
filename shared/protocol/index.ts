@@ -185,6 +185,13 @@ export const ServerMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("errorMessage"),
     message: z.string(),
   }),
+  // Lab 8: sent before close code 1001 when the server receives SIGTERM.
+  z.object({
+    v: z.literal(0),
+    type: z.literal("shutdown"),
+    reason: z.string(),
+    reconnectMs: z.number().int().nonnegative(),
+  }),
 ]);
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;
 

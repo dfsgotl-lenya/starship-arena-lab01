@@ -1,0 +1,18 @@
+# Production-like local run: `docker compose up --build`, then http://localhost:3001
+services:
+  game:
+    build:
+      context: .
+      args:
+        GIT_SHA: ${GIT_SHA:-local}
+        APP_VERSION: ${APP_VERSION:-0.0.0-local}
+    image: starship-arena:local
+    ports:
+      - "3001:3001"
+    environment:
+      LOG_LEVEL: info
+      BOTS: ${BOTS:-0}
+      ALLOWED_ORIGINS: ""
+      MAX_CONNECTIONS_PER_IP: 16
+    stop_grace_period: 10s
+    restart: unless-stopped

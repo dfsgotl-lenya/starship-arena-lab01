@@ -18,16 +18,6 @@ export type LobbyErrorDetails = {
   readonly error: unknown;
 };
 
-async function* intervalTicks(
-  signal: AbortSignal,
-  intervalMs: number,
-): AsyncGenerator<number, void, void> {
-  while (!signal.aborted) {
-    yield Date.now();
-    await sleep(intervalMs, signal);
-  }
-}
-
 function combinedSignal(
   controllerSignal: AbortSignal,
   timeoutMs: number,
@@ -42,6 +32,13 @@ export class Lobby extends EventTarget {
   #controller: AbortController | null = null;
   #running = false;
   #rooms: LobbyRoom[] = [];
+  #failures = 0;
+
+  /** Poll interval, or 0.5 s · 2^n (max 8 s) after n failed refreshes. */
+  nextDelayMs(): number {
+    if (this.#failures === 0) return this.#intervalMs;
+    return Math.min(8000, 500 * 2 ** (this.#failures - 1));
+  }
 
   constructor({
     endpoint = "/api/rooms",
@@ -98,16 +95,17 @@ export class Lobby extends EventTarget {
     if (this.#running) return;
     this.#running = true;
     this.#controller = new AbortController();
-    await this.refresh();
+    this.#failures = (await this.refresh()) ? 0 : 1;
     const controller = this.#controller;
     if (!controller) return;
     try {
-      for await (const _tick of intervalTicks(
-        controller.signal,
-        this.#intervalMs,
-      )) {
+      // Lab 8: while the server is down (deploy, restart) back off
+      // exponentially instead of hammering it every 4 s.
+      while (!controller.signal.aborted && this.#running) {
+        await sleep(this.nextDelayMs(), controller.signal);
         if (!this.#running) break;
-        await this.refresh();
+        const rooms = await this.refresh();
+        this.#failures = rooms ? 0 : this.#failures + 1;
       }
     } catch (error: unknown) {
       if (!(error instanceof Error && error.name === "AbortError")) {

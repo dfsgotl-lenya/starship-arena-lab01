@@ -7,6 +7,8 @@ import { Match } from "./match.ts";
 import { BotBrain } from "./bots.ts";
 import type { ServerConfig } from "./config.ts";
 import type { RoomPlayer } from "./types.ts";
+import type { Logger } from "./logger.ts";
+import { silentLogger } from "./logger.ts";
 
 export type RoomLogEvent =
   | {
@@ -81,6 +83,7 @@ const BOT_SOCKET = Object.freeze({
 export class Room extends EventEmitter<RoomEvents> {
   readonly #players = new Map<string, RoomPlayer>();
   readonly #bots = new Map<string, RoomPlayer>();
+  readonly #logger: Logger;
   #botCounter = 0;
   readonly #log: MatchLog;
   #closed = false;
@@ -103,8 +106,10 @@ export class Room extends EventEmitter<RoomEvents> {
       readonly arena: ArenaConfig;
     },
     config: ServerConfig,
+    logger: Logger = silentLogger,
   ) {
     super();
+    this.#logger = logger.child({ roomId: id });
     this.id = id;
     this.name = name;
     this.capacity = capacity;
@@ -119,7 +124,9 @@ export class Room extends EventEmitter<RoomEvents> {
           error instanceof Error ? error : new Error(String(error)),
         ),
       );
-    this.on("error", (error) => console.error(`[room:${this.id}]`, error));
+    this.on("error", (error) =>
+      this.#logger.error({ event: "room.error", err: error }),
+    );
   }
 
   get players(): ReadonlyMap<string, RoomPlayer> {
@@ -249,12 +256,16 @@ export class Room extends EventEmitter<RoomEvents> {
 export class RoomManager extends EventEmitter<RoomManagerEvents> {
   readonly #rooms = new Map<string, Room>();
   readonly #config: ServerConfig;
+  readonly #logger: Logger;
 
-  constructor(config: ServerConfig) {
+  constructor(config: ServerConfig, logger: Logger = silentLogger) {
     super();
     this.#config = config;
+    this.#logger = logger;
     this.#seedDefaults();
-    this.on("error", (error) => console.error("[room-manager]", error));
+    this.on("error", (error) =>
+      this.#logger.error({ event: "rooms.error", err: error }),
+    );
   }
 
   list(): RoomInfo[] {
@@ -289,11 +300,17 @@ export class RoomManager extends EventEmitter<RoomManagerEvents> {
     if (this.#rooms.size >= this.#config.maxRooms)
       throw new Error("server room limit reached");
     if (this.#rooms.has(id)) throw new Error("room already exists");
-    const room = new Room({ id, name, capacity, arena }, this.#config);
+    const room = new Room(
+      { id, name, capacity, arena },
+      this.#config,
+      this.#logger,
+    );
+    this.#logger.info({ event: "room.created", roomId: id, capacity });
     room.on("empty", () => {
       // Lab 6 deleted the default rooms too, so "alpha" vanished from the
       // lobby after the last pilot left.
       if (persistent) return;
+      this.#logger.info({ event: "room.closed", roomId: room.id });
       this.#rooms.delete(room.id);
       void room.close();
     });

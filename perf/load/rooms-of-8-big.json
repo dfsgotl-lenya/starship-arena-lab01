@@ -1,0 +1,29 @@
+{
+  "label": "rooms-of-8-big",
+  "date": "2026-10-17T10:00:13.591Z",
+  "env": {},
+  "rows": [
+    {
+      "clients": 768,
+      "tickP50Ms": 0.2,
+      "tickP95Ms": 0.48,
+      "tickP99Ms": 3.94,
+      "tickMaxMs": 10.8,
+      "stepMsAvg": 0.05,
+      "ticksPerSecond": 24.81,
+      "snapshotKBps": 17.22,
+      "entities": 17
+    },
+    {
+      "clients": 1024,
+      "tickP50Ms": 0.21,
+      "tickP95Ms": 0.47,
+      "tickP99Ms": 5.38,
+      "tickMaxMs": 28.65,
+      "stepMsAvg": 0.05,
+      "ticksPerSecond": 14.36,
+      "snapshotKBps": 10.01,
+      "entities": 21
+    }
+  ]
+}

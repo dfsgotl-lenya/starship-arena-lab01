@@ -4,13 +4,23 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#050a14" />
-    <title>Starship Arena — Lab 05</title>
+    <title>Starship Arena</title>
+    <meta
+      name="description"
+      content="Online multiplayer space shooter — authoritative Node server, prediction, binary protocol."
+    />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icons/icon-192.png" type="image/png" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
   </head>
   <body>
     <main class="app-shell">
       <header class="topbar">
         <div>
-          <p class="eyebrow">JavaScript • Lab 05</p>
+          <p class="eyebrow">
+            JavaScript • Lab 08 • <span id="app-version">dev</span>
+          </p>
           <h1>STARSHIP ARENA</h1>
           <p class="subtitle">
             Authoritative server • prediction • reconciliation • binary protocol
@@ -24,7 +34,7 @@
           <div class="canvas-wrap" id="canvas-wrap" tabindex="0">
             <canvas id="game" aria-label="Поле гри Starship Arena"></canvas>
             <div id="loading-screen" class="overlay loading-overlay">
-              <p class="section-label">Lab 05 networked game</p>
+              <p class="section-label">Starship Arena</p>
               <p id="loading-label">Loading…</p>
               <p id="loading-error" class="loading-error"></p>
               <button id="retry-loading" class="retry-button" hidden>
@@ -32,6 +42,7 @@
               </button>
             </div>
             <div id="lobby-screen" class="overlay" hidden></div>
+            <p id="net-banner" class="net-banner" role="status" hidden></p>
             <div id="game-screen" hidden>
               <div class="hud hud-top">
                 <span>STEPS/S <strong id="steps">0.0</strong></span>
@@ -82,7 +93,7 @@
 
         <aside class="lab-panel">
           <section>
-            <p class="section-label">LAB 05 FEATURES</p>
+            <p class="section-label">FEATURES</p>
             <div class="feature-list">
               <div>
                 <strong>30 Hz server</strong><span>authoritative tick</span>

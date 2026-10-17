@@ -58,3 +58,20 @@ jobs:
           path: |
             playwright-report/
             test-results/
+
+  docker:
+    name: docker image (size, non-root, healthcheck, docker stop)
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Build image
+        run: >
+          docker build -t starship-arena:ci
+          --build-arg GIT_SHA=${GITHUB_SHA::7}
+          --build-arg APP_VERSION=ci .
+      - name: Container smoke test
+        run: ./scripts/docker-smoke.sh starship-arena:ci

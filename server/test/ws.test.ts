@@ -1,9 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { createServer } from "node:http";
-import type { AddressInfo } from "node:net";
-import { WebSocket, WebSocketServer } from "ws";
-import { attachWebSocketServer } from "../src/ws.ts";
-import { RoomManager } from "../src/rooms.ts";
+import { WebSocket } from "ws";
+import { createApp } from "../src/app.ts";
+import type { App } from "../src/app.ts";
+import { silentLogger } from "../src/logger.ts";
 import {
   decodeSnapshot,
   encodeInput,
@@ -12,29 +11,17 @@ import { sequenceNumber, tickNumber } from "@starship-arena/shared/types.ts";
 import { testConfig } from "./helpers.ts";
 
 let url = "";
-let close: () => Promise<void> = async () => undefined;
+let app: App;
 
 beforeEach(async () => {
-  const config = testConfig({ messageRate: 60 });
-  const server = createServer();
-  const wss = new WebSocketServer({
-    server,
-    path: "/ws",
-    maxPayload: config.maxPayload,
+  app = await createApp(testConfig({ messageRate: 60 }), {
+    logger: silentLogger,
+    rootDir: process.cwd(),
   });
-  const rooms = new RoomManager(config);
-  const stop = attachWebSocketServer(wss, rooms, config);
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  url = `ws://127.0.0.1:${(server.address() as AddressInfo).port}/ws`;
-  close = async () => {
-    stop();
-    for (const client of wss.clients) client.terminate();
-    wss.close();
-    await rooms.closeAll();
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-  };
+  const { port } = await app.listen();
+  url = `ws://127.0.0.1:${port}/ws`;
 });
-afterEach(async () => close());
+afterEach(async () => app.shutdown("test"));
 
 interface Client {
   socket: WebSocket;

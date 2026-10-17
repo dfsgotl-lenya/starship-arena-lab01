@@ -1,3 +1,9 @@
+/* The `hidden` attribute must win over component display rules
+   (Lab 5–7 bug: `.overlay { display: grid }` kept the lobby on top of the game). */
+[hidden] {
+  display: none !important;
+}
+
 :root {
   font-family:
     Inter,
@@ -467,4 +473,24 @@ kbd {
   background: #1b1116;
   color: #ffd8df;
   font-size: 0.68rem;
+}
+
+/* Lab 8: shown when the server restarts or the connection drops. */
+.net-banner {
+  position: absolute;
+  left: 50%;
+  top: 14px;
+  transform: translateX(-50%);
+  z-index: 5;
+  max-width: min(560px, 92%);
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid rgb(255 196 120 / 45%);
+  border-radius: 10px;
+  background: rgb(40 22 6 / 88%);
+  color: #ffd7a1;
+  font:
+    600 13px/1.4 system-ui,
+    sans-serif;
+  text-align: center;
 }

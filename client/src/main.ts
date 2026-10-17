@@ -45,6 +45,8 @@ interface AppDom extends HudElements {
   readonly netCorrection: HTMLElement;
   readonly interpDelay: HTMLInputElement;
   readonly breakDeterminism: HTMLButtonElement;
+  readonly netBanner: HTMLElement;
+  readonly version: HTMLElement;
 }
 function required<T extends HTMLElement>(selector: string): T {
   const element = document.querySelector<T>(selector);
@@ -108,6 +110,8 @@ const dom: AppDom = {
   netCorrection: required("#net-correction"),
   interpDelay: required<HTMLInputElement>("#interp-delay"),
   breakDeterminism: required<HTMLButtonElement>("#break-determinism"),
+  netBanner: required("#net-banner"),
+  version: required("#app-version"),
 };
 const stars = Array.from({ length: 120 }, (_, index) => ({
   x: ((index * 73) % 997) / 997,
@@ -464,7 +468,19 @@ dom.chatForm.addEventListener("submit", (event: SubmitEvent) => {
 });
 dom.leaveRoom.addEventListener("click", () => {
   if (serverJoined) connection.send({ v: 0, type: "leave" });
+  exitToLobby(null);
+});
+
+/**
+ * Leave the match UI and go back to the lobby. Used by the Leave button and
+ * when the server goes away (Lab 8: SIGTERM sends `shutdown` + 1001, or the
+ * connection just drops). The lobby then polls with exponential backoff and
+ * shows the rooms again once the new server is up.
+ */
+function exitToLobby(reason: string | null): void {
   connection.close(1000, "left room");
+  dom.netBanner.textContent = reason ?? "";
+  dom.netBanner.hidden = reason === null;
   loop?.stop();
   loop = null;
   joined = false;
@@ -476,9 +492,42 @@ dom.leaveRoom.addEventListener("click", () => {
   dom.netgraph.hidden = true;
   dom.chatPanel.hidden = true;
   dom.lobby.hidden = false;
-  dom.statusBadge.textContent = "LOBBY READY";
+  dom.statusBadge.textContent = reason ? "RECONNECTING" : "LOBBY READY";
   void lobby.start();
+}
+connection.addEventListener("shutdown", (event: Event) => {
+  const message = messageOf(event);
+  if (message?.type === "shutdown" && joined)
+    exitToLobby(
+      `Server is restarting (${message.reason}). You are back in the lobby — rooms reappear in a few seconds.`,
+    );
 });
+connection.addEventListener("close", (event: Event) => {
+  const detail: unknown = event instanceof CustomEvent ? event.detail : null;
+  const code = detail instanceof CloseEvent ? detail.code : 1006;
+  if (joined && code !== 1000)
+    exitToLobby(
+      `Connection lost (code ${code}). Back in the lobby; retrying with backoff…`,
+    );
+});
+lobby.addEventListener("roomsChanged", () => {
+  if (!dom.netBanner.hidden && !joined) {
+    dom.netBanner.textContent = "Server is back — pick a room to play again.";
+    window.setTimeout(() => (dom.netBanner.hidden = true), 4000);
+  }
+});
+void fetch("/health")
+  .then((response) => response.json())
+  .then((health: unknown) => {
+    if (
+      typeof health === "object" &&
+      health !== null &&
+      "version" in health &&
+      "gitSha" in health
+    )
+      dom.version.textContent = `v${String(health.version)} · ${String(health.gitSha).slice(0, 7)}`;
+  })
+  .catch(() => undefined);
 window.addEventListener("keydown", (event: KeyboardEvent) => {
   if (event.code === "Space" && !event.repeat && netGame) netGame.fire();
   if (event.code === "KeyR" && netGame?.localShip) {
@@ -509,3 +558,12 @@ window.addEventListener("beforeunload", () => {
   audio.dispose();
 });
 void boot();
+
+// Lab 8 PWA: installable on phones/desktops. Service workers need a secure
+// context (https or localhost); skip in tests/perf runs.
+if (
+  "serviceWorker" in navigator &&
+  window.isSecureContext &&
+  !pageParams.has("perf")
+)
+  void navigator.serviceWorker.register("/sw.js").catch(() => undefined);

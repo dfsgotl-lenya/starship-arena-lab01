@@ -31,6 +31,8 @@ function option(name: string, fallback: string): string {
 }
 const counts = option("counts", "8,32,64,128,256,512").split(",").map(Number);
 const seconds = Number(option("seconds", "8"));
+/** 0 = everyone in one room; K = rooms of K players (realistic matches). */
+const roomSize = Number(option("room-size", "0"));
 const extraEnv: Record<string, string> = {};
 for (let index = 0; index < argv.length; index += 1)
   if (argv[index] === "--env") {
@@ -71,6 +73,8 @@ async function startServer(port: number) {
         PORT: String(port),
         HOST: "127.0.0.1",
         ROOM_CAPACITY: "1024",
+        MAX_ROOMS: "1000",
+        MAX_CONNECTIONS_PER_IP: "5000",
         MESSAGE_RATE: "60",
         MAX_PAYLOAD: "8192",
         SLOW_CLIENT_BYTES: "8000000",
@@ -82,7 +86,7 @@ async function startServer(port: number) {
   );
   await new Promise<void>((resolve, reject) => {
     child.stdout.on("data", (chunk: Buffer) => {
-      if (String(chunk).includes("[server] http")) resolve();
+      if (String(chunk).includes("server.listening")) resolve();
     });
     child.once("exit", (code) => reject(new Error(`server exited ${code}`)));
   });
@@ -153,16 +157,28 @@ async function measure(clients: number): Promise<Row> {
   const base = `http://127.0.0.1:${port}`;
   const server = await startServer(port);
   try {
-    const created = (await fetch(`${base}/api/rooms`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: `load ${clients}`, capacity: clients }),
-    }).then((response) => response.json())) as { room: { id: string } };
-    const room = created.room.id;
+    const perRoom = roomSize > 0 ? roomSize : clients;
+    const roomIds: string[] = [];
+    for (let made = 0; made < clients; made += perRoom) {
+      const created = (await fetch(`${base}/api/rooms`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: `load ${clients}`, capacity: perRoom }),
+      }).then((response) => response.json())) as { room: { id: string } };
+      roomIds.push(created.room.id);
+    }
+    const room = roomIds[0]!;
     const meter = { bytes: 0, entities: 0 };
     const sockets: WebSocket[] = [];
     for (let index = 0; index < clients; index += 1)
-      sockets.push(await connectClient(base, room, index, meter));
+      sockets.push(
+        await connectClient(
+          base,
+          roomIds[Math.floor(index / perRoom)]!,
+          index,
+          meter,
+        ),
+      );
     await sleep(3000);
     const read = async (): Promise<StatsRoom> => {
       const stats = (await fetch(`${base}/api/stats`).then((response) =>
@@ -170,7 +186,19 @@ async function measure(clients: number): Promise<Row> {
       )) as { rooms: StatsRoom[] };
       const found = stats.rooms.find((item) => item.room === room);
       if (!found) throw new Error("room missing from stats");
-      return found;
+      // With many rooms, report the worst room (all rooms share one event loop).
+      const ours = stats.rooms.filter((item) => roomIds.includes(item.room));
+      const worst = ours.reduce(
+        (a, b) => (b.tickP99Ms > a.tickP99Ms ? b : a),
+        found,
+      );
+      return {
+        ...found,
+        tickP50Ms: worst.tickP50Ms,
+        tickP95Ms: worst.tickP95Ms,
+        tickP99Ms: worst.tickP99Ms,
+        tickMaxMs: Math.max(...ours.map((item) => item.tickMaxMs)),
+      };
     };
     const first = await read();
     const bytesStart = meter.bytes;
