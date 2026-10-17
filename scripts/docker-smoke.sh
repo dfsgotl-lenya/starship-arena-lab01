@@ -44,6 +44,9 @@ wait "$client"
 exit_code=$(docker inspect "$cid" --format '{{.State.ExitCode}}')
 ms=$(((end - start) / 1000000))
 echo "docker stop took ${ms} ms, exit code ${exit_code}"
+# Visible as annotations on the run page (and via `gh run view`).
+echo "::notice title=Docker image::size ${size_mb} MB, user ${user}, health ${status}"
+echo "::notice title=docker stop::${ms} ms, exit code ${exit_code}, client close code 1001"
 docker logs "$cid" 2>&1 | tail -n 4
 test "$exit_code" = "0"
 test "$ms" -lt 10000
