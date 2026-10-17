@@ -1,0 +1,229 @@
+{
+  "label": "after",
+  "seconds": 30,
+  "bots": 8,
+  "date": "2026-10-16T21:32:20.523Z",
+  "chromium": "141.0.7390.37",
+  "frames": {
+    "frames": 1792,
+    "workP50": 0.6000000000931323,
+    "workP95": 2.3999999999068677,
+    "workP99": 4.7000000001862645,
+    "workMax": 10,
+    "intervalP50": 16.699999999720603,
+    "intervalP95": 19,
+    "intervalP99": 23.799999999813735,
+    "intervalMax": 39.10000000009313,
+    "longFrames": 48
+  },
+  "snapshotHandling": {
+    "totalMs": 65.50000000372529,
+    "count": 901,
+    "perSnapshotUs": 72.7
+  },
+  "consoleErrors": [],
+  "gc": {
+    "minor": {
+      "count": 3,
+      "totalMs": 3.64,
+      "maxMs": 1.51,
+      "p95Ms": 1.51,
+      "over4ms": 0
+    },
+    "major": {
+      "count": 10,
+      "totalMs": 63.89,
+      "maxMs": 13.83,
+      "p95Ms": 13.83,
+      "over4ms": 10
+    }
+  },
+  "heap": {
+    "minMb": 5.25620174407959,
+    "maxMb": 7.219629287719727,
+    "avgEntities": 80.41637010676156
+  },
+  "server": {
+    "tickP50Ms": 0.24,
+    "tickP95Ms": 0.37,
+    "tickP99Ms": 0.6,
+    "tickMaxMs": 2.59,
+    "stepMsAvg": 0.17,
+    "jitterMs": 0.67
+  },
+  "allocators": [
+    {
+      "fn": "drawBackground index-CK3LJoxB.js:231",
+      "MB": 1.49,
+      "KB/s": 51.01,
+      "share": "25.1%"
+    },
+    {
+      "fn": "draw index-CK3LJoxB.js:5277",
+      "MB": 0.87,
+      "KB/s": 29.78,
+      "share": "14.65%"
+    },
+    {
+      "fn": "next",
+      "MB": 0.78,
+      "KB/s": 26.6,
+      "share": "13.09%"
+    },
+    {
+      "fn": "frame index-CK3LJoxB.js:97",
+      "MB": 0.33,
+      "KB/s": 11.23,
+      "share": "5.53%"
+    },
+    {
+      "fn": "getFloat32",
+      "MB": 0.31,
+      "KB/s": 10.42,
+      "share": "5.13%"
+    },
+    {
+      "fn": "drawWorld index-CK3LJoxB.js:283",
+      "MB": 0.27,
+      "KB/s": 9.21,
+      "share": "4.53%"
+    },
+    {
+      "fn": "get size index-CK3LJoxB.js:179",
+      "MB": 0.2,
+      "KB/s": 6.82,
+      "share": "3.36%"
+    },
+    {
+      "fn": "emit index-CK3LJoxB.js:5235",
+      "MB": 0.18,
+      "KB/s": 6.01,
+      "share": "2.96%"
+    },
+    {
+      "fn": "integrateInPlace index-CK3LJoxB.js:5302",
+      "MB": 0.16,
+      "KB/s": 5.34,
+      "share": "2.63%"
+    },
+    {
+      "fn": "encodeInput index-CK3LJoxB.js:4649",
+      "MB": 0.11,
+      "KB/s": 3.76,
+      "share": "1.85%"
+    },
+    {
+      "fn": "drawGrid index-CK3LJoxB.js:196",
+      "MB": 0.11,
+      "KB/s": 3.61,
+      "share": "1.77%"
+    },
+    {
+      "fn": "(anonymous) index-CK3LJoxB.js:5027",
+      "MB": 0.08,
+      "KB/s": 2.81,
+      "share": "1.39%"
+    },
+    {
+      "fn": "imul",
+      "MB": 0.07,
+      "KB/s": 2.54,
+      "share": "1.25%"
+    },
+    {
+      "fn": "(IDLE_EXTERNAL)",
+      "MB": 0.07,
+      "KB/s": 2.46,
+      "share": "1.21%"
+    },
+    {
+      "fn": "step index-CK3LJoxB.js:5564",
+      "MB": 0.07,
+      "KB/s": 2.4,
+      "share": "1.18%"
+    },
+    {
+      "fn": "TOTAL",
+      "MB": 5.95,
+      "KB/s": 203.2,
+      "share": "100%"
+    }
+  ],
+  "hot": [
+    {
+      "fn": "drawImage",
+      "ms": 226.74,
+      "share": "0.75%"
+    },
+    {
+      "fn": "(garbage collector)",
+      "ms": 186.41,
+      "share": "0.62%"
+    },
+    {
+      "fn": "send",
+      "ms": 125.79,
+      "share": "0.42%"
+    },
+    {
+      "fn": "requestAnimationFrame",
+      "ms": 101.57,
+      "share": "0.34%"
+    },
+    {
+      "fn": "save",
+      "ms": 100.87,
+      "share": "0.34%"
+    },
+    {
+      "fn": "fillRect",
+      "ms": 89.63,
+      "share": "0.3%"
+    },
+    {
+      "fn": "drawBackground index-CK3LJoxB.js:231",
+      "ms": 78.09,
+      "share": "0.26%"
+    },
+    {
+      "fn": "frame index-CK3LJoxB.js:97",
+      "ms": 33.62,
+      "share": "0.11%"
+    },
+    {
+      "fn": "translate",
+      "ms": 32.6,
+      "share": "0.11%"
+    },
+    {
+      "fn": "restore",
+      "ms": 28.29,
+      "share": "0.09%"
+    },
+    {
+      "fn": "(anonymous) index-CK3LJoxB.js:5027",
+      "ms": 25.68,
+      "share": "0.09%"
+    },
+    {
+      "fn": "#interpolate index-CK3LJoxB.js:5771",
+      "ms": 22.21,
+      "share": "0.07%"
+    },
+    {
+      "fn": "draw index-CK3LJoxB.js:5277",
+      "ms": 21.19,
+      "share": "0.07%"
+    },
+    {
+      "fn": "step index-CK3LJoxB.js:5564",
+      "ms": 18.41,
+      "share": "0.06%"
+    },
+    {
+      "fn": "update index-CK3LJoxB.js:5258",
+      "ms": 15.29,
+      "share": "0.05%"
+    }
+  ]
+}

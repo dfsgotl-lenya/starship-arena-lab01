@@ -12,12 +12,12 @@ import { mountLobby } from "./lobby/dom.ts";
 import { mountDiagnostics } from "./diagnostics.ts";
 import { createHud } from "./hud.ts";
 import type { HudElements } from "./hud.ts";
-import { GameConnection } from "./connection.ts";
+import { GameConnection, messageOf } from "./connection.ts";
+import { ParticleSystem } from "./render/particles.ts";
 import { NetworkGame } from "./netcode/game-client.ts";
 import { Bus } from "./events.ts";
 import type { GameEvents } from "./events.ts";
 import type { LoopStats, RenderWorld } from "./types.ts";
-import { ServerMessageSchema } from "@starship-arena/shared/protocol/index.ts";
 import { FrameRecorder } from "./perf.ts";
 
 interface AppDom extends HudElements {
@@ -73,6 +73,7 @@ const input = createInput(window);
 const audio = createAudioEngine();
 const lobby = new Lobby();
 const connection = new GameConnection();
+const particles = new ParticleSystem(1024);
 const dom: AppDom = {
   loading: required("#loading-screen"),
   loadingLabel: required("#loading-label"),
@@ -121,9 +122,44 @@ const recorder = new FrameRecorder(pageParams.get("perf") === "1");
 let lastEntityCount = 0;
 window.__perf = {
   recorder,
-  start: () => recorder.start(),
+  start: () => {
+    connection.snapshotMainThreadMs = 0;
+    connection.snapshotsHandled = 0;
+    recorder.start();
+  },
   stop: () => recorder.stop(),
   entities: () => lastEntityCount,
+  snapshotMs: () => ({
+    totalMs: connection.snapshotMainThreadMs,
+    count: connection.snapshotsHandled,
+  }),
+  ships: () =>
+    renderState.entities
+      .filter((entity) => entity.kind === "ship")
+      .map((entity) => ({
+        id: Number(entity.id),
+        x: entity.x,
+        y: entity.y,
+        local: entity.local === true,
+      })),
+};
+if (pageParams.get("worker") === "1")
+  connection.useWorker(
+    new Worker(new URL("./netcode/snapshot.worker.ts", import.meta.url), {
+      type: "module",
+    }),
+  );
+/** HUD and netgraph are text: update them at 4 Hz, not every frame. */
+const HUD_INTERVAL_MS = 250;
+let lastHudAt = 0;
+const renderState: {
+  entities: RenderWorld["entities"];
+  score: number;
+  roomName: string;
+} = {
+  entities: [],
+  score: 0,
+  roomName: "—",
 };
 let assets: LoadedAssets | null = null;
 let loop: ReturnType<typeof createLoop> | null = null;
@@ -132,6 +168,8 @@ let currentRoom: LobbyRoom | null = null;
 let joined = false;
 let serverJoined = false;
 let netGame: NetworkGame | null = null;
+let joinedShip: { playerId: string; shipId: NetworkGame["shipId"] } | null =
+  null;
 
 function showCanvasLoading(progress: number, label: string, error = ""): void {
   const { ctx, size } = canvasApi;
@@ -188,6 +226,7 @@ function startNetworkGame(): void {
   dom.chatPanel.hidden = false;
   dom.statusBadge.textContent = currentRoom.name.toUpperCase();
   dom.room.textContent = currentRoom.name;
+  netGame?.dispose();
   netGame = new NetworkGame({
     connection,
     width: canvasApi.size.width,
@@ -195,8 +234,14 @@ function startNetworkGame(): void {
     input,
     events,
   });
-  netGame.onRoster = renderRoster;
-  netGame.onChat = ({ name, text }) => appendChat(`${name}: ${text}`, "user");
+  // NetworkGame is created after the "joined" event fired (Lab 6 bug: its own
+  // listener missed it, so the local ship was never predicted).
+  if (joinedShip) {
+    netGame.playerId = joinedShip.playerId;
+    netGame.shipId = joinedShip.shipId;
+  }
+  netGame.onDestroyed = (x, y, kind) =>
+    particles.explosion(x, y, kind === "ship");
   dom.protocolLabel.textContent = connection.protocol.toUpperCase();
   hud.setScore(0);
   mountDiagnostics(dom.diagnostics);
@@ -206,17 +251,18 @@ function startNetworkGame(): void {
     recorder,
     simulate(dt) {
       netGame?.step(dt);
+      particles.update(dt);
       input.endFrame();
     },
     render(alpha: number, stats: LoopStats) {
-      const gameState = netGame?.render(performance.now()) ?? {
-        entities: [],
-        score: 0,
-      };
-      const renderState: RenderWorld = {
-        ...gameState,
-        roomName: currentRoom?.name ?? "—",
-      };
+      const now = performance.now();
+      if (netGame) {
+        const gameState = netGame.render(now);
+        renderState.entities = gameState.entities;
+        renderState.score = gameState.score ?? 0;
+        emitTrails(gameState.entities);
+      }
+      renderState.roomName = currentRoom?.name ?? "—";
       drawBackground(
         canvasApi.ctx,
         canvasApi.size.width,
@@ -230,14 +276,52 @@ function startNetworkGame(): void {
         canvasApi.size.height,
       );
       if (assets) drawWorld(canvasApi.ctx, renderState, alpha, assets);
+      particles.draw(canvasApi.ctx);
       lastEntityCount = renderState.entities.length;
-      hud.update(stats, renderState);
-      updateNetgraph();
+      if (now - lastHudAt >= HUD_INTERVAL_MS) {
+        lastHudAt = now;
+        hud.update(stats, renderState);
+        updateNetgraph();
+      }
     },
   });
   loop.start();
   dom.canvasWrap.focus();
 }
+/** Engine trail behind every moving ship — particles come from the pool. */
+function emitTrails(entities: RenderWorld["entities"]): void {
+  for (let index = 0; index < entities.length; index += 1) {
+    const entity = entities[index]!;
+    if (entity.kind !== "ship") continue;
+    const speed = Math.abs(entity.vx) + Math.abs(entity.vy);
+    if (speed < 60) continue;
+    const back = entity.angle + Math.PI;
+    particles.emit(
+      entity.x + Math.cos(back) * 16,
+      entity.y + Math.sin(back) * 16,
+      1,
+      30,
+      0.35,
+      190,
+      2,
+      Math.cos(back) * 60,
+      Math.sin(back) * 60,
+    );
+  }
+}
+events.addEventListener("fired", () => {
+  const ship = netGame?.localShip;
+  if (ship)
+    particles.emit(
+      ship.x + Math.cos(ship.angle) * 26,
+      ship.y + Math.sin(ship.angle) * 26,
+      6,
+      90,
+      0.18,
+      50,
+      2,
+    );
+});
 function updateNetgraph(): void {
   if (!netGame) return;
   const stats = netGame.netStats();
@@ -313,15 +397,18 @@ connection.addEventListener("open", () => {
       name: currentPlayerName,
     });
 });
-connection.addEventListener("joined", async (event: Event) => {
-  const parsed = ServerMessageSchema.safeParse(customDetail(event));
-  if (
-    !parsed.success ||
-    parsed.data.type !== "joined" ||
-    parsed.data.room !== currentRoom?.id
-  )
-    return;
+connection.addEventListener("joined", (event: Event) => {
+  void onJoined(event);
+});
+async function onJoined(event: Event): Promise<void> {
+  const message = messageOf(event);
+  if (message?.type !== "joined" || message.room !== currentRoom?.id) return;
   serverJoined = true;
+  joinedShip = { playerId: message.playerId, shipId: message.shipId };
+  if (netGame) {
+    netGame.playerId = message.playerId;
+    netGame.shipId = message.shipId;
+  }
   try {
     await audio.unlock();
     audio.attach(events);
@@ -334,21 +421,22 @@ connection.addEventListener("joined", async (event: Event) => {
       `Joined ${currentRoom.name} via authoritative server.`,
       "system",
     );
-});
+}
+// Validated once in GameConnection; listeners only narrow by `type`.
+// (Lab 6 rendered chat twice: here and via NetworkGame.onChat.)
 connection.addEventListener("roster", (event: Event) => {
-  const parsed = ServerMessageSchema.safeParse(customDetail(event));
-  if (parsed.success && parsed.data.type === "roster")
-    renderRoster(parsed.data.players);
+  const message = messageOf(event);
+  if (message?.type === "roster") renderRoster(message.players);
 });
 connection.addEventListener("chat", (event: Event) => {
-  const parsed = ServerMessageSchema.safeParse(customDetail(event));
-  if (parsed.success && parsed.data.type === "chat")
-    appendChat(`${parsed.data.name}: ${parsed.data.text}`, "user");
+  const message = messageOf(event);
+  if (message?.type === "chat")
+    appendChat(`${message.name}: ${message.text}`, "user");
 });
 connection.addEventListener("errorMessage", (event: Event) => {
-  const parsed = ServerMessageSchema.safeParse(customDetail(event));
-  if (parsed.success && parsed.data.type === "errorMessage") {
-    appendChat(`Server error: ${parsed.data.message}`, "system");
+  const message = messageOf(event);
+  if (message?.type === "errorMessage") {
+    appendChat(`Server error: ${message.message}`, "system");
     dom.statusBadge.textContent = "JOIN ERROR";
   }
 });
@@ -378,9 +466,11 @@ dom.leaveRoom.addEventListener("click", () => {
   if (serverJoined) connection.send({ v: 0, type: "leave" });
   connection.close(1000, "left room");
   loop?.stop();
+  loop = null;
   joined = false;
   serverJoined = false;
   currentRoom = null;
+  netGame?.dispose();
   netGame = null;
   dom.game.hidden = true;
   dom.netgraph.hidden = true;

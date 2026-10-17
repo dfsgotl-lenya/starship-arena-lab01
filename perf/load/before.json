@@ -1,0 +1,51 @@
+{
+  "label": "before",
+  "date": "2026-10-16T21:03:10.388Z",
+  "env": {},
+  "rows": [
+    {
+      "clients": 8,
+      "tickP50Ms": 0.2,
+      "tickP95Ms": 0.39,
+      "tickP99Ms": 0.76,
+      "tickMaxMs": 1.85,
+      "stepMsAvg": 0.1,
+      "ticksPerSecond": 30.1,
+      "snapshotKBps": 18.56,
+      "entities": 26
+    },
+    {
+      "clients": 32,
+      "tickP50Ms": 0.56,
+      "tickP95Ms": 1.16,
+      "tickP99Ms": 2.56,
+      "tickMaxMs": 4.74,
+      "stepMsAvg": 0.28,
+      "ticksPerSecond": 30,
+      "snapshotKBps": 49.34,
+      "entities": 51
+    },
+    {
+      "clients": 64,
+      "tickP50Ms": 1.19,
+      "tickP95Ms": 1.97,
+      "tickP99Ms": 3.41,
+      "tickMaxMs": 5.75,
+      "stepMsAvg": 0.31,
+      "ticksPerSecond": 29.97,
+      "snapshotKBps": 83.83,
+      "entities": 102
+    },
+    {
+      "clients": 128,
+      "tickP50Ms": 3.44,
+      "tickP95Ms": 5.52,
+      "tickP99Ms": 6.51,
+      "tickMaxMs": 8.97,
+      "stepMsAvg": 0.54,
+      "ticksPerSecond": 30.08,
+      "snapshotKBps": 152.13,
+      "entities": 169
+    }
+  ]
+}

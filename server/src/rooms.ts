@@ -57,6 +57,8 @@ export interface CreateRoomInput {
   readonly name: string;
   readonly capacity?: number;
   readonly arena?: ArenaConfig;
+  /** Seeded lobby rooms survive becoming empty; user-created rooms do not. */
+  readonly persistent?: boolean;
 }
 export interface RoomInfo {
   readonly id: string;
@@ -165,7 +167,10 @@ export class Room extends EventEmitter<RoomEvents> {
         net: { protocol: "binary" },
       };
       player.net.sendSnapshot = (snapshot) => {
-        this.match.handleInput(player.id, brain.decide(snapshot, player.shipId));
+        this.match.handleInput(
+          player.id,
+          brain.decide(snapshot, player.shipId),
+        );
       };
       this.#bots.set(player.id, player);
       this.match.addPlayer(player);
@@ -198,10 +203,12 @@ export class Room extends EventEmitter<RoomEvents> {
   }
 
   roster(): Array<{ id: string; name: string }> {
-    return [...this.#players.values(), ...this.#bots.values()].map((player) => ({
-      id: player.id,
-      name: player.name,
-    }));
+    return [...this.#players.values(), ...this.#bots.values()].map(
+      (player) => ({
+        id: player.id,
+        name: player.name,
+      }),
+    );
   }
 
   async close(): Promise<void> {
@@ -277,12 +284,16 @@ export class RoomManager extends EventEmitter<RoomManagerEvents> {
     name,
     capacity = this.#config.roomCapacity,
     arena = {},
+    persistent = false,
   }: CreateRoomInput): Room {
     if (this.#rooms.size >= this.#config.maxRooms)
       throw new Error("server room limit reached");
     if (this.#rooms.has(id)) throw new Error("room already exists");
     const room = new Room({ id, name, capacity, arena }, this.#config);
     room.on("empty", () => {
+      // Lab 6 deleted the default rooms too, so "alpha" vanished from the
+      // lobby after the last pilot left.
+      if (persistent) return;
       this.#rooms.delete(room.id);
       void room.close();
     });
@@ -333,6 +344,6 @@ export class RoomManager extends EventEmitter<RoomManagerEvents> {
         },
       },
     ];
-    for (const room of defaults) this.create(room);
+    for (const room of defaults) this.create({ ...room, persistent: true });
   }
 }

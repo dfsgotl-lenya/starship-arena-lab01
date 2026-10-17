@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-floating-promises, @typescript-eslint/await-thenable --
+   Lab 3 ordering puzzles: un-awaited promises and `await 0` are the subject of the demo. */
 export function runOrderingPuzzles() {
   window.console.group("[Lab 03] Five microtask/task ordering puzzles");
 

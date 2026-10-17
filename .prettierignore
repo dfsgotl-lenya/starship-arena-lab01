@@ -6,3 +6,7 @@ logs/
 server/data/generated/
 /src/**
 /index.html
+perf/
+coverage/
+playwright-report/
+test-results/

@@ -14,9 +14,22 @@ export interface SnapshotPayload extends Snapshot {
   readonly serverTime: number;
 }
 
+/**
+ * Per-tick encoding cache shared by every player of a match: the binary frame
+ * and the JSON snapshot are produced at most once per tick (lazily).
+ */
+export interface SnapshotFrame {
+  binary(): ArrayBuffer;
+  json(): Snapshot;
+}
+
 export interface PlayerNetwork {
   protocol?: "json" | "binary";
-  sendSnapshot?: (snapshot: SnapshotPayload, config: ServerConfig) => void;
+  sendSnapshot?: (
+    snapshot: SnapshotPayload,
+    config: ServerConfig,
+    frame?: SnapshotFrame,
+  ) => void;
 }
 
 export interface RoomPlayer {

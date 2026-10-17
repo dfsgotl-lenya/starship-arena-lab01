@@ -100,7 +100,7 @@ async function serveStatic(
       "Cache-Control": ext === ".html" ? "no-store" : "public, max-age=3600",
     });
     createReadStream(filePath).pipe(res);
-  } catch (error: unknown) {
+  } catch (_error: unknown) {
     if (!path.extname(filePath)) return serveStatic(res, "/index.html");
     json(res, 404, { error: "not found" });
   }
@@ -155,7 +155,15 @@ function validateRoomBody(body: unknown) {
   };
 }
 
-const server = createServer(async (req, res) => {
+const server = createServer((req, res) => {
+  // Every request is handled to completion here; nothing is left floating.
+  void handleRequest(req, res);
+});
+
+async function handleRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
   try {
     const url = new URL(req.url ?? "/", `http://${config.host}:${config.port}`);
     if (req.method === "GET" && url.pathname === "/health") {
@@ -257,7 +265,7 @@ const server = createServer(async (req, res) => {
     console.error("[http]", error);
     if (!res.headersSent) json(res, 500, { error: "internal server error" });
   }
-});
+}
 
 const wss = new WebSocketServer({
   server,

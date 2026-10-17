@@ -1,12 +1,11 @@
 import { defineConfig } from "vite";
 
-// PERF_BUILD=1 keeps function names readable in CPU/allocation profiles.
-const perfBuild = Boolean(globalThis.process?.env?.PERF_BUILD);
-
-export default defineConfig({
+// `vite build --mode perf` keeps function names readable in CPU/allocation
+// profiles (no minification) and emits source maps.
+export default defineConfig(({ mode }) => ({
   build: {
-    minify: perfBuild ? false : "esbuild",
-    sourcemap: perfBuild,
+    minify: mode === "perf" ? false : "esbuild",
+    sourcemap: mode === "perf",
   },
   server: {
     port: 5173,
@@ -15,4 +14,4 @@ export default defineConfig({
       "/ws": { target: "ws://127.0.0.1:3001", ws: true, changeOrigin: true },
     },
   },
-});
+}));

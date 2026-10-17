@@ -1,5 +1,6 @@
 import { entityId, sequenceNumber, tickNumber } from "../types.ts";
 import type {
+  EntityId,
   EntityKind,
   InputPacket,
   NetworkSnapshot,
@@ -185,6 +186,162 @@ export function decodeSnapshot(data: unknown): NetworkSnapshot {
     offset += ENTITY_BYTES;
   }
   return { version: 1, tick, lastProcessedSeq, score, entities };
+}
+
+/** Size in bytes of a binary snapshot frame with `count` entities. */
+export function snapshotByteLength(count: number): number {
+  return HEADER_BYTES + count * ENTITY_BYTES;
+}
+export const INPUT_BYTE_LENGTH = 12;
+
+/**
+ * Server fan-out helper: the entity body is identical for every client, only
+ * `lastProcessedSeq` and `score` in the header differ. Copy the frame encoded
+ * once per tick and patch those 8 bytes instead of re-encoding per client.
+ */
+export function withSnapshotHeader(
+  frame: ArrayBuffer,
+  lastProcessedSeq: Seq,
+  score: number,
+): Uint8Array {
+  assertUint32(lastProcessedSeq, "lastProcessedSeq");
+  assertInt32(score, "score");
+  const copy = new Uint8Array(frame.byteLength);
+  copy.set(new Uint8Array(frame));
+  const view = new DataView(copy.buffer);
+  view.setUint32(8, lastProcessedSeq, true);
+  view.setInt32(12, score, true);
+  return copy;
+}
+
+/**
+ * One monomorphic entity shape for every kind. The client decodes snapshots
+ * into pooled objects of this shape, so property access sites in render and
+ * interpolation stay monomorphic and no objects are created per message.
+ */
+export interface NetEntity {
+  id: EntityId;
+  kind: EntityKind;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  angle: number;
+  radius: number;
+  alive: boolean;
+  hp: number;
+  maxHp: number;
+  ownerId: EntityId;
+  ttl: number;
+  homing: boolean;
+  variant: number;
+}
+export interface PooledSnapshot {
+  tick: Tick;
+  lastProcessedSeq: Seq;
+  score: number;
+  count: number;
+  /** Grows to the largest snapshot seen; only the first `count` are valid. */
+  readonly entities: NetEntity[];
+}
+
+export function blankNetEntity(): NetEntity {
+  return {
+    id: entityId(0),
+    kind: "ship",
+    x: 0,
+    y: 0,
+    vx: 0,
+    vy: 0,
+    angle: 0,
+    radius: 0,
+    alive: false,
+    hp: 0,
+    maxHp: 0,
+    ownerId: entityId(0),
+    ttl: 0,
+    homing: false,
+    variant: 0,
+  };
+}
+export function createPooledSnapshot(): PooledSnapshot {
+  return {
+    tick: tickNumber(0),
+    lastProcessedSeq: sequenceNumber(0),
+    score: 0,
+    count: 0,
+    entities: [],
+  };
+}
+
+/**
+ * Allocation-free twin of `decodeSnapshot`: validates the same way, then
+ * writes into `target`, reusing its entity objects.
+ */
+export function decodeSnapshotInto(
+  data: ArrayBuffer,
+  target: PooledSnapshot,
+): PooledSnapshot {
+  if (!(data instanceof ArrayBuffer))
+    throw new TypeError("binary snapshot must be an ArrayBuffer");
+  if (data.byteLength < HEADER_BYTES)
+    throw new Error("invalid binary snapshot length");
+  const view = new DataView(data);
+  assertHeader(view, SNAPSHOT_TYPE);
+  const count = view.getUint16(6, true);
+  if (count > MAX_ENTITIES)
+    throw new Error("binary snapshot entity count is out of range");
+  if (data.byteLength !== HEADER_BYTES + count * ENTITY_BYTES)
+    throw new Error("invalid binary snapshot length");
+  // Validate everything before mutating `target`, so a bad frame never
+  // leaves a half-written snapshot behind.
+  for (let index = 0, offset = HEADER_BYTES; index < count; index += 1) {
+    kindName(view.getUint8(offset + 2));
+    if ((view.getUint8(offset + 3) & 0xfc) !== 0)
+      throw new Error("invalid binary entity flags");
+    for (let field = 6; field <= 18; field += 4)
+      finite(view.getFloat32(offset + field, true), "position");
+    offset += ENTITY_BYTES;
+  }
+  target.tick = tickNumber(view.getUint32(2, true));
+  target.lastProcessedSeq = sequenceNumber(view.getUint32(8, true));
+  target.score = view.getInt32(12, true);
+  target.count = count;
+  const entities = target.entities;
+  while (entities.length < count) entities.push(blankNetEntity());
+  let offset = HEADER_BYTES;
+  for (let index = 0; index < count; index += 1) {
+    const entity = entities[index]!;
+    const kind = kindName(view.getUint8(offset + 2));
+    const flags = view.getUint8(offset + 3);
+    const hp = view.getUint16(offset + 24, true);
+    entity.id = entityId(view.getUint16(offset, true));
+    entity.kind = kind;
+    entity.alive = (flags & 2) !== 0;
+    entity.homing = (flags & 1) !== 0;
+    entity.ownerId = entityId(
+      kind === "bullet" ? view.getUint16(offset + 4, true) : 0,
+    );
+    entity.x = view.getFloat32(offset + 6, true);
+    entity.y = view.getFloat32(offset + 10, true);
+    entity.vx = view.getFloat32(offset + 14, true);
+    entity.vy = view.getFloat32(offset + 18, true);
+    entity.angle = view.getInt16(offset + 22, true) / 1000;
+    entity.hp = kind === "ship" ? hp : 0;
+    entity.maxHp = kind === "ship" ? Math.max(100, hp) : 0;
+    entity.radius =
+      kind === "ship"
+        ? 18
+        : kind === "bullet"
+          ? 5
+          : kind === "asteroid"
+            ? 28
+            : 12;
+    entity.ttl = kind === "bullet" ? 1 : 0;
+    entity.variant = index % 4;
+    offset += ENTITY_BYTES;
+  }
+  return target;
 }
 
 export function kindCode(kind: EntityKind): number {

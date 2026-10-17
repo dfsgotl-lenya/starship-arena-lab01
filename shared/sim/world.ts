@@ -1,10 +1,19 @@
 import { mulberry32, seedFromString } from "./prng.ts";
-import { createAsteroid, createBullet, createShip } from "./entity.ts";
-import { integrate } from "./integrate.ts";
-import { resolveCollisions } from "./collision.ts";
+import {
+  blankBullet,
+  createAsteroid,
+  createShip,
+  initBullet,
+} from "./entity.ts";
+import type { Muzzle } from "./entity.ts";
+import { integrateInPlace, wrapPosition } from "./integrate.ts";
+import { CollisionSystem } from "./collision.ts";
+import type { Broadphase } from "./collision.ts";
+import { Pool } from "./pool.ts";
 import { entityId, tickNumber } from "../types.ts";
 import type {
   ArenaConfig,
+  BulletEntity,
   Entity,
   EntityId,
   InputState,
@@ -19,7 +28,16 @@ export interface WorldOptions {
   readonly height?: number;
   readonly seed?: number;
   readonly arena?: ArenaConfig;
+  /** Collision broad phase: spatial hash (default) or all-vs-all. */
+  readonly broadphase?: Broadphase;
 }
+
+const IDLE_INPUT: InputState = Object.freeze({
+  thrust: false,
+  turn: 0,
+  fire: false,
+});
+const NO_INPUTS: ReadonlyMap<EntityId, InputState> = new Map();
 interface RespawnEntry {
   readonly playerId: EntityId;
   readonly at: number;
@@ -40,18 +58,24 @@ export class World {
   /** Gameplay RNG (asteroid refills); seeded, so the step stays deterministic. */
   #rng = mulberry32(1);
   #asteroidTimer = 0;
+  readonly collisions: CollisionSystem;
+  /** Bullets are recycled: a dead bullet goes back here instead of to the GC. */
+  readonly bulletPool = new Pool<BulletEntity>(blankBullet, { prefill: 64 });
+  readonly #liveEntities: Entity[] = [];
 
   constructor({
     width = 960,
     height = 600,
     seed = 1,
     arena = {},
+    broadphase = "hash",
   }: WorldOptions = {}) {
     this.width = width;
     this.height = height;
     this.seed = seed >>> 0;
     this.arena = { ...arena };
     this.#rng = mulberry32(this.seed ^ 0x9e3779b9);
+    this.collisions = new CollisionSystem(width, height, broadphase);
   }
 
   /**
@@ -73,7 +97,9 @@ export class World {
   }
 
   remove(id: EntityId): void {
+    const entity = this.entities.get(id);
     this.entities.delete(id);
+    if (entity?.kind === "bullet") this.bulletPool.release(entity);
   }
 
   addShip(id: EntityId, x = this.width / 2, y = this.height / 2) {
@@ -82,8 +108,13 @@ export class World {
     return this.add(ship);
   }
 
-  spawnBullet(ownerId: EntityId, ship: Parameters<typeof createBullet>[2]) {
-    const bullet = createBullet(this.allocateId(), ownerId, ship);
+  spawnBullet(ownerId: EntityId, ship: Muzzle): BulletEntity {
+    const bullet = initBullet(
+      this.bulletPool.acquire(),
+      this.allocateId(),
+      ownerId,
+      ship,
+    );
     return this.add(bullet);
   }
 
@@ -133,21 +164,17 @@ export class World {
 
   step(
     dt: number,
-    inputs: ReadonlyMap<EntityId, InputState> = new Map(),
+    inputs: ReadonlyMap<EntityId, InputState> = NO_INPUTS,
   ): void {
     this.time += dt;
     this.tick = tickNumber(Number(this.tick) + 1);
-    this.events = [];
+    // Reuse the same array: events are read synchronously after step().
+    this.events.length = 0;
     for (const entity of this.entities.values()) {
       if (!entity.alive) continue;
       if (entity.kind === "ship") {
-        const input = inputs.get(entity.id) ?? {
-          thrust: false,
-          turn: 0,
-          fire: false,
-        };
-        const next = integrate(entity, input, dt);
-        Object.assign(entity, next);
+        const input = inputs.get(entity.id) ?? IDLE_INPUT;
+        integrateInPlace(entity, input, dt, entity);
         if (input.fire && entity.fireCooldown <= 0) {
           this.spawnBullet(entity.id, entity);
           entity.fireCooldown = entity.fireInterval;
@@ -166,9 +193,9 @@ export class World {
       } else {
         assertNever(entity);
       }
-      wrap(entity, this.width, this.height);
+      wrapPosition(entity, this.width, this.height);
     }
-    resolveCollisions(this);
+    this.collisions.resolve(this);
     this.#sweep();
     this.#processRespawns();
     this.#refillAsteroids(dt);
@@ -219,10 +246,11 @@ export class World {
   }
 
   #processRespawns(): void {
-    const remaining: RespawnEntry[] = [];
+    if (this.respawns.length === 0) return;
+    let kept = 0;
     for (const entry of this.respawns) {
       if (entry.at > this.time) {
-        remaining.push(entry);
+        this.respawns[kept++] = entry;
         continue;
       }
       const ship = this.addShip(
@@ -232,12 +260,29 @@ export class World {
       );
       this.events.push({ type: "respawned", playerId: ship.id });
     }
-    this.respawns = remaining;
+    this.respawns.length = kept;
   }
 
   #sweep(): void {
-    for (const [id, entity] of this.entities)
-      if (!entity.alive) this.entities.delete(id);
+    for (const [id, entity] of this.entities) {
+      if (entity.alive) continue;
+      this.entities.delete(id);
+      if (entity.kind === "bullet") this.bulletPool.release(entity);
+    }
+  }
+
+  /**
+   * Live entities by reference, in a reused array — what the binary encoder
+   * and the bots need each tick. Valid until the next call.
+   */
+  liveEntities(): readonly Entity[] {
+    const out = this.#liveEntities;
+    let count = 0;
+    for (const entity of this.entities.values()) out[count++] = entity;
+    // Shrinking to a non-zero length trims in place; `length = 0` followed by
+    // push() would drop and re-allocate the backing store every tick.
+    if (out.length !== count) out.length = count;
+    return out;
   }
 
   addScore(playerId: EntityId, points: number): void {
@@ -288,16 +333,11 @@ function toSnapshotEntity(entity: Entity): SnapshotEntity {
   }
 }
 
-function wrap(entity: Entity, width: number, height: number): void {
-  if (entity.x < 0) entity.x += width;
-  if (entity.x >= width) entity.x -= width;
-  if (entity.y < 0) entity.y += height;
-  if (entity.y >= height) entity.y -= height;
-}
-
 function assertNever(value: never): never {
   throw new Error(`Unhandled entity kind: ${JSON.stringify(value)}`);
 }
+
+export type { Broadphase };
 
 export function deterministicSeed(roomId: string, salt = 0): number {
   return (seedFromString(roomId) ^ (salt >>> 0)) >>> 0;

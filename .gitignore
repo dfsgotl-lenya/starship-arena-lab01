@@ -18,3 +18,4 @@ perf/results/*/allocations.heapprofile
 perf/results/smoke/
 test-results/
 playwright-report/
+perf/results/*/gc-events.json

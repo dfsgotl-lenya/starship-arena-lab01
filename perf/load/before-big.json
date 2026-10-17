@@ -1,0 +1,29 @@
+{
+  "label": "before-big",
+  "date": "2026-10-16T21:04:48.997Z",
+  "env": {},
+  "rows": [
+    {
+      "clients": 256,
+      "tickP50Ms": 13.5,
+      "tickP95Ms": 25.31,
+      "tickP99Ms": 30.68,
+      "tickMaxMs": 37.85,
+      "stepMsAvg": 1.11,
+      "ticksPerSecond": 30.14,
+      "snapshotKBps": 369.37,
+      "entities": 485
+    },
+    {
+      "clients": 512,
+      "tickP50Ms": 62.89,
+      "tickP95Ms": 99.34,
+      "tickP99Ms": 115.35,
+      "tickMaxMs": 119.66,
+      "stepMsAvg": 2.5,
+      "ticksPerSecond": 10.27,
+      "snapshotKBps": 306.73,
+      "entities": 1247
+    }
+  ]
+}

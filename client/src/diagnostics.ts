@@ -28,7 +28,7 @@ export function mountDiagnostics(root: HTMLElement): void {
 
   required<HTMLButtonElement>(root, '[data-test="404"]').addEventListener(
     "click",
-    async () => {
+    asyncHandler(async () => {
       try {
         await withRetry(() => loadImage("/assets/sprites/missing-sprite.png"), {
           attempts: 3,
@@ -38,11 +38,11 @@ export function mountDiagnostics(root: HTMLElement): void {
           `404 sprite recovered: ${errorMessage(error)}; 4xx was not retried.`,
         );
       }
-    },
+    }),
   );
   required<HTMLButtonElement>(root, '[data-test="timeout"]').addEventListener(
     "click",
-    async () => {
+    asyncHandler(async () => {
       try {
         await fetchJson("/api/slow?ms=4000", {
           signal: AbortSignal.timeout(500),
@@ -52,11 +52,11 @@ export function mountDiagnostics(root: HTMLElement): void {
           `network timeout recovered: ${errorName(error)} (${errorMessage(error)}).`,
         );
       }
-    },
+    }),
   );
   required<HTMLButtonElement>(root, '[data-test="abort"]').addEventListener(
     "click",
-    async () => {
+    asyncHandler(async () => {
       const controller = new AbortController();
       const promise = fetchJson("/api/slow?ms=3000", {
         signal: controller.signal,
@@ -67,21 +67,21 @@ export function mountDiagnostics(root: HTMLElement): void {
       } catch (error: unknown) {
         append(`abort mid-load recovered: ${errorName(error)}.`);
       }
-    },
+    }),
   );
   required<HTMLButtonElement>(root, '[data-test="bad-json"]').addEventListener(
     "click",
-    async () => {
+    asyncHandler(async () => {
       try {
         await fetchJson("/api/bad.json");
       } catch (error: unknown) {
         append(`corrupt JSON recovered: ${errorName(error)}.`);
       }
-    },
+    }),
   );
   required<HTMLButtonElement>(root, '[data-test="retry"]').addEventListener(
     "click",
-    async () => {
+    asyncHandler(async () => {
       const key = `demo-${Date.now()}`;
       try {
         const value = await withRetry(
@@ -106,11 +106,11 @@ export function mountDiagnostics(root: HTMLElement): void {
       } catch (error: unknown) {
         append(`retry test failed: ${errorMessage(error)}`);
       }
-    },
+    }),
   );
   required<HTMLButtonElement>(root, '[data-test="benchmark"]').addEventListener(
     "click",
-    async () => {
+    asyncHandler(async () => {
       const urls = [1, 2, 3, 4].map(
         (index) => `/api/slow?ms=320&n=${index}&t=${Date.now()}`,
       );
@@ -123,6 +123,13 @@ export function mountDiagnostics(root: HTMLElement): void {
       append(
         `benchmark: sequential ${sequentialMs.toFixed(0)} ms vs concurrent ${concurrentMs.toFixed(0)} ms.`,
       );
-    },
+    }),
   );
+}
+
+/** DOM listeners ignore returned promises; make fire-and-forget explicit. */
+function asyncHandler(run: () => Promise<void>): () => void {
+  return () => {
+    void run();
+  };
 }

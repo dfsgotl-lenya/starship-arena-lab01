@@ -1,7 +1,11 @@
 import {
-  decodeSnapshot,
+  blankNetEntity,
+  decodeSnapshotInto,
   encodeInput,
 } from "@starship-arena/shared/codec/binary.ts";
+import type { PooledSnapshot } from "@starship-arena/shared/codec/binary.ts";
+import { entityId } from "@starship-arena/shared/types.ts";
+import { unpackSnapshot } from "./netcode/snapshot-pack.ts";
 import { decodeJson } from "@starship-arena/shared/codec/json.ts";
 import { ServerMessageSchema } from "@starship-arena/shared/protocol/index.ts";
 import type {
@@ -10,7 +14,32 @@ import type {
 } from "@starship-arena/shared/protocol/index.ts";
 import type { InputPacket } from "@starship-arena/shared/types.ts";
 
+/**
+ * Receives snapshots without events or intermediate objects: the connection
+ * decodes straight into a pooled slot handed out by the game.
+ */
+export interface SnapshotSink {
+  slot(): PooledSnapshot;
+  commit(snapshot: PooledSnapshot): void;
+}
+
+/** Messages that already passed ServerMessageSchema once, in the connection. */
+const validated = new WeakSet<object>();
+export function messageOf(event: Event): ServerMessage | null {
+  if (!(event instanceof CustomEvent)) return null;
+  const detail: unknown = event.detail;
+  return isValidated(detail) ? detail : null;
+}
+function isValidated(value: unknown): value is ServerMessage {
+  return typeof value === "object" && value !== null && validated.has(value);
+}
+
 export class GameConnection extends EventTarget {
+  snapshotSink: SnapshotSink | null = null;
+  /** Main-thread time spent handling snapshots (ms), for the worker experiment. */
+  snapshotMainThreadMs = 0;
+  snapshotsHandled = 0;
+  #worker: Worker | null = null;
   readonly #url: string;
   readonly #protocol: "json" | "binary";
   #socket: WebSocket | null = null;
@@ -86,24 +115,27 @@ export class GameConnection extends EventTarget {
     });
     socket.addEventListener("message", (event: MessageEvent<unknown>) => {
       try {
-        let untrusted: unknown;
         if (event.data instanceof ArrayBuffer) {
-          untrusted = { v: 0, type: "snapshot", ...decodeSnapshot(event.data) };
           this.#bytesIn += event.data.byteLength;
-        } else if (typeof event.data === "string") {
-          this.#bytesIn += new TextEncoder().encode(event.data).byteLength;
-          untrusted = decodeJson(event.data);
-        } else {
-          throw new Error("unsupported WebSocket payload type");
+          this.#binarySnapshot(event.data);
+          return;
         }
-        const parsed = ServerMessageSchema.safeParse(untrusted);
+        if (typeof event.data !== "string")
+          throw new Error("unsupported WebSocket payload type");
+        this.#bytesIn += event.data.length;
+        // JSON is untrusted: validate exactly once, here.
+        const parsed = ServerMessageSchema.safeParse(decodeJson(event.data));
         if (!parsed.success)
           throw new Error(
             `invalid server message: ${parsed.error.issues.map((issue) => issue.message).join("; ")}`,
           );
         const message: ServerMessage = parsed.data;
+        if (message.type === "snapshot") {
+          this.#jsonSnapshot(message);
+          return;
+        }
+        validated.add(message);
         this.dispatchEvent(new CustomEvent(message.type, { detail: message }));
-        this.dispatchEvent(new CustomEvent("message", { detail: message }));
       } catch (error: unknown) {
         this.dispatchEvent(new CustomEvent("protocolError", { detail: error }));
       }
@@ -142,6 +174,83 @@ export class GameConnection extends EventTarget {
     }
     this.#queue.push(buffer);
     return false;
+  }
+
+  /**
+   * Lab 7 experiment: decode snapshots in a Web Worker (`?worker=1`).
+   * The received ArrayBuffer is transferred (zero-copy) to the worker, which
+   * validates and packs it into a Float64Array transferred back.
+   */
+  useWorker(worker: Worker): void {
+    this.#worker = worker;
+    worker.addEventListener("message", (event: MessageEvent<unknown>) => {
+      const start = performance.now();
+      const data: unknown = event.data;
+      const sink = this.snapshotSink;
+      if (sink && data instanceof Float64Array) {
+        const slot = sink.slot();
+        unpackSnapshot(data, slot);
+        sink.commit(slot);
+      } else if (typeof data === "string") {
+        this.dispatchEvent(new CustomEvent("protocolError", { detail: data }));
+      }
+      this.snapshotMainThreadMs += performance.now() - start;
+    });
+  }
+
+  #binarySnapshot(data: ArrayBuffer): void {
+    const start = performance.now();
+    this.snapshotsHandled += 1;
+    if (this.#worker) {
+      this.#worker.postMessage(data, [data]);
+    } else {
+      const sink = this.snapshotSink;
+      if (sink) {
+        // Binary frames are validated by the decoder itself (version, type,
+        // exact length, kinds, flags, finite floats) — no second zod pass.
+        const slot = sink.slot();
+        decodeSnapshotInto(data, slot);
+        sink.commit(slot);
+      }
+    }
+    this.snapshotMainThreadMs += performance.now() - start;
+  }
+
+  #jsonSnapshot(message: Extract<ServerMessage, { type: "snapshot" }>): void {
+    const sink = this.snapshotSink;
+    if (!sink) return;
+    const slot = sink.slot();
+    slot.tick = message.tick;
+    slot.lastProcessedSeq = message.lastProcessedSeq;
+    slot.score = message.score;
+    slot.count = message.entities.length;
+    while (slot.entities.length < slot.count)
+      slot.entities.push(blankNetEntity());
+    message.entities.forEach((source, index) => {
+      const target = slot.entities[index]!;
+      target.id = source.id;
+      target.kind = source.kind;
+      target.x = source.x;
+      target.y = source.y;
+      target.vx = source.vx;
+      target.vy = source.vy;
+      target.angle = source.angle;
+      target.radius = source.radius;
+      target.alive = source.alive;
+      target.hp = source.kind === "ship" ? source.hp : 0;
+      target.maxHp = source.kind === "ship" ? source.maxHp : 0;
+      target.ownerId = source.kind === "bullet" ? source.ownerId : entityId(0);
+      target.ttl = source.kind === "bullet" ? source.ttl : 0;
+      target.homing =
+        source.kind === "bullet" || source.kind === "asteroid"
+          ? source.homing
+          : false;
+      target.variant =
+        source.kind === "asteroid" || source.kind === "pickup"
+          ? source.variant
+          : 0;
+    });
+    sink.commit(slot);
   }
 
   close(code = 1000, reason = "client closing"): void {

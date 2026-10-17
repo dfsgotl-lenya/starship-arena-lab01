@@ -67,6 +67,11 @@ async function openGame() {
     viewport: { width: 1280, height: 800 },
   });
   const page = await context.newPage();
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() === "error") errors.push(message.text());
+  });
   await page.goto(`${base}/?perf=1${query ? `&${query}` : ""}`);
   await page.waitForSelector("#join-room:not([disabled])");
   await page.click("#join-room");
@@ -78,7 +83,7 @@ async function openGame() {
   const fireTimer = setInterval(() => {
     void page.keyboard.press("Space").catch(() => undefined);
   }, 250);
-  return { context, page, stop: () => clearInterval(fireTimer) };
+  return { context, page, errors, stop: () => clearInterval(fireTimer) };
 }
 
 async function collectTrace(cdp) {
@@ -125,6 +130,8 @@ while (Date.now() - startedAt < seconds * 1000) {
   await sleep(100);
 }
 const frames = await clean.page.evaluate(() => window.__perf?.stop());
+const snapshotHandling = await clean.page.evaluate(() => window.__perf?.snapshotMs?.() ?? null);
+const consoleErrors = clean.errors;
 console.error("[perf] collecting trace");
 const trace = await collectTrace(cdp1);
 console.error("[perf] trace events", trace.length);
@@ -138,6 +145,12 @@ const rendererPid = (() => {
       counts.set(event.pid, (counts.get(event.pid) ?? 0) + 1);
   return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
 })();
+await writeFile(
+  path.join(outDir, "gc-events.json"),
+  JSON.stringify(
+    trace.filter((event) => /GC|Mark|Scaveng|Sweep|Compact/i.test(event.name) && event.pid === rendererPidGuess(trace)),
+  ),
+);
 const gcEvents = trace.filter(
   (event) =>
     event.pid === rendererPid &&
@@ -177,6 +190,13 @@ const summary = {
   date: new Date().toISOString(),
   chromium: browser.version(),
   frames,
+  snapshotHandling: snapshotHandling && {
+    ...snapshotHandling,
+    perSnapshotUs: snapshotHandling.count
+      ? round((snapshotHandling.totalMs * 1000) / snapshotHandling.count)
+      : 0,
+  },
+  consoleErrors,
   gc,
   heap: {
     minMb: Math.min(...heap.map((s) => s.used)) / 1048576,
@@ -191,9 +211,17 @@ await writeFile(path.join(outDir, "summary.json"), JSON.stringify(summary, null,
 await writeFile(path.join(outDir, "heap-timeline.json"), JSON.stringify(heap));
 await writeFile(path.join(outDir, "cpu.cpuprofile"), JSON.stringify(cpuProfile));
 await writeFile(path.join(outDir, "allocations.heapprofile"), JSON.stringify(heapProfile));
-console.log(JSON.stringify({ frames, gc, heap: summary.heap, server: summary.server }, null, 2));
+console.log(JSON.stringify({ frames, snapshotHandling: summary.snapshotHandling, consoleErrors, gc, heap: summary.heap, server: summary.server }, null, 2));
 console.table(allocators.slice(0, 8));
 console.table(hot.slice(0, 8));
+
+function rendererPidGuess(events) {
+  const counts = new Map();
+  for (const event of events)
+    if (event.name === "FunctionCall" || event.name === "FireAnimationFrame")
+      counts.set(event.pid, (counts.get(event.pid) ?? 0) + 1);
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+}
 
 function summarizeGc(events, name) {
   const pauses = events

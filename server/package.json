@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node --env-file=../.env --import tsx --watch src/index.ts",
     "start": "node --import tsx src/index.ts",
-    "test": "tsx --test test/*.test.js"
+    "test": "vitest run"
   },
   "dependencies": {
     "@starship-arena/shared": "file:../shared",

@@ -40,6 +40,30 @@ function drawGrid(
   ctx.restore();
 }
 
+/** The gradient only depends on height: build it once, not every frame. */
+let cachedGradient: CanvasGradient | null = null;
+let cachedGradientCtx: CanvasRenderingContext2D | null = null;
+let cachedGradientHeight = -1;
+function backgroundGradient(
+  ctx: CanvasRenderingContext2D,
+  height: number,
+): CanvasGradient {
+  if (
+    cachedGradient &&
+    cachedGradientCtx === ctx &&
+    cachedGradientHeight === height
+  )
+    return cachedGradient;
+  const gradient = ctx.createLinearGradient(0, 0, 0, height);
+  gradient.addColorStop(0, "#020713");
+  gradient.addColorStop(0.55, "#071425");
+  gradient.addColorStop(1, "#02080f");
+  cachedGradient = gradient;
+  cachedGradientCtx = ctx;
+  cachedGradientHeight = height;
+  return gradient;
+}
+
 export function drawBackground(
   ctx: CanvasRenderingContext2D,
   width: number,
@@ -53,11 +77,7 @@ export function drawBackground(
     phase: number;
   }[],
 ): void {
-  const gradient = ctx.createLinearGradient(0, 0, 0, height);
-  gradient.addColorStop(0, "#020713");
-  gradient.addColorStop(0.55, "#071425");
-  gradient.addColorStop(1, "#02080f");
-  ctx.fillStyle = gradient;
+  ctx.fillStyle = backgroundGradient(ctx, height);
   ctx.fillRect(0, 0, width, height);
   drawGrid(ctx, width, height, time);
   ctx.save();
@@ -81,15 +101,17 @@ export function drawArenaFrame(
   ctx.restore();
 }
 
-function renderPos(
-  entity: ClientEntity,
-  alpha: number,
-): { x: number; y: number; angle: number } {
-  return {
-    x: lerp(entity.prevX ?? entity.x, entity.x, alpha),
-    y: lerp(entity.prevY ?? entity.y, entity.y, alpha),
-    angle: lerpAngle(entity.prevAngle ?? entity.angle, entity.angle, alpha),
-  };
+/** Reused scratch result: Lab 6 returned a new {x, y, angle} per entity per frame. */
+const position = { x: 0, y: 0, angle: 0 };
+function renderPos(entity: ClientEntity, alpha: number): typeof position {
+  position.x = lerp(entity.prevX ?? entity.x, entity.x, alpha);
+  position.y = lerp(entity.prevY ?? entity.y, entity.y, alpha);
+  position.angle = lerpAngle(
+    entity.prevAngle ?? entity.angle,
+    entity.angle,
+    alpha,
+  );
+  return position;
 }
 function drawSprite(
   ctx: CanvasRenderingContext2D,
@@ -130,14 +152,19 @@ export function drawWorld(
   alpha: number,
   assets: Assets,
 ): void {
-  for (const entity of world.entities) {
+  const now = performance.now();
+  const shipFrame = Math.floor((now / 120) % 4);
+  const bulletFrame = Math.floor((now / 90) % 4);
+  const entities = world.entities;
+  for (let index = 0; index < entities.length; index += 1) {
+    const entity = entities[index]!;
     const position = renderPos(entity, alpha);
     switch (entity.kind) {
       case "ship":
         drawSprite(
           ctx,
           assets.sprites["ship"],
-          Math.floor((performance.now() / 120) % 4),
+          shipFrame,
           position.x,
           position.y,
           48,
@@ -150,7 +177,7 @@ export function drawWorld(
         drawSprite(
           ctx,
           assets.sprites["bullet"],
-          Math.floor((performance.now() / 90) % 4),
+          bulletFrame,
           position.x,
           position.y,
           24,

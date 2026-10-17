@@ -7,15 +7,16 @@ import { parseClientMessage } from "./protocol.ts";
 import {
   decodeInput,
   encodeSnapshot,
+  withSnapshotHeader,
 } from "@starship-arena/shared/codec/binary.ts";
 import type { ClientMessage } from "@starship-arena/shared/protocol/index.ts";
 import type { ServerConfig } from "./config.ts";
 import { RoomManager } from "./rooms.ts";
-import type { Room } from "./rooms.ts";
 import type {
   NetSettings,
   RoomPlayer,
   SocketAppState,
+  SnapshotFrame,
   SnapshotPayload,
 } from "./types.ts";
 import { errorMessage } from "./types.ts";
@@ -217,17 +218,35 @@ function handleJoin(
   player.net.sendSnapshot = (
     snapshot: SnapshotPayload,
     serverConfig: ServerConfig,
+    frame?: SnapshotFrame,
   ) => {
     if (state.net.protocol === "json") {
-      const text = JSON.stringify({ v: 0, type: "snapshot", ...snapshot });
+      const body = frame ? frame.json() : snapshot;
+      const text = JSON.stringify({
+        v: 0,
+        type: "snapshot",
+        ...body,
+        lastProcessedSeq: snapshot.lastProcessedSeq,
+        score: snapshot.score,
+        serverTime: snapshot.serverTime,
+      });
       delayedSend(socket, text, state.net, serverConfig);
     } else {
-      const data = encodeSnapshot(
-        snapshot,
-        snapshot.lastProcessedSeq,
-        snapshot.score,
+      const bytes = frame
+        ? withSnapshotHeader(
+            frame.binary(),
+            snapshot.lastProcessedSeq,
+            snapshot.score,
+          )
+        : new Uint8Array(
+            encodeSnapshot(snapshot, snapshot.lastProcessedSeq, snapshot.score),
+          );
+      delayedSend(
+        socket,
+        Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength),
+        state.net,
+        serverConfig,
       );
-      delayedSend(socket, Buffer.from(data), state.net, serverConfig);
     }
   };
   room.join(player);

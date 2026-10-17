@@ -1,0 +1,95 @@
+{
+  "label": "after",
+  "date": "2026-10-16T21:43:33.658Z",
+  "env": {},
+  "rows": [
+    {
+      "clients": 8,
+      "tickP50Ms": 0.19,
+      "tickP95Ms": 0.37,
+      "tickP99Ms": 0.48,
+      "tickMaxMs": 2.68,
+      "stepMsAvg": 0.09,
+      "ticksPerSecond": 29.97,
+      "snapshotKBps": 17.37,
+      "entities": 28
+    },
+    {
+      "clients": 32,
+      "tickP50Ms": 0.34,
+      "tickP95Ms": 0.78,
+      "tickP99Ms": 0.97,
+      "tickMaxMs": 4.95,
+      "stepMsAvg": 0.2,
+      "ticksPerSecond": 30.01,
+      "snapshotKBps": 45.37,
+      "entities": 66
+    },
+    {
+      "clients": 64,
+      "tickP50Ms": 0.48,
+      "tickP95Ms": 0.83,
+      "tickP99Ms": 1.28,
+      "tickMaxMs": 2.82,
+      "stepMsAvg": 0.23,
+      "ticksPerSecond": 30.09,
+      "snapshotKBps": 72.93,
+      "entities": 75
+    },
+    {
+      "clients": 128,
+      "tickP50Ms": 0.87,
+      "tickP95Ms": 1.27,
+      "tickP99Ms": 1.5,
+      "tickMaxMs": 1.93,
+      "stepMsAvg": 0.33,
+      "ticksPerSecond": 29.96,
+      "snapshotKBps": 110.03,
+      "entities": 113
+    },
+    {
+      "clients": 256,
+      "tickP50Ms": 1.64,
+      "tickP95Ms": 2.82,
+      "tickP99Ms": 3.92,
+      "tickMaxMs": 7.03,
+      "stepMsAvg": 0.51,
+      "ticksPerSecond": 30.2,
+      "snapshotKBps": 160.81,
+      "entities": 232
+    },
+    {
+      "clients": 512,
+      "tickP50Ms": 3.65,
+      "tickP95Ms": 8.56,
+      "tickP99Ms": 11.88,
+      "tickMaxMs": 13.57,
+      "stepMsAvg": 0.96,
+      "ticksPerSecond": 30.08,
+      "snapshotKBps": 280.24,
+      "entities": 372
+    },
+    {
+      "clients": 768,
+      "tickP50Ms": 7.59,
+      "tickP95Ms": 22.37,
+      "tickP99Ms": 33.64,
+      "tickMaxMs": 58.42,
+      "stepMsAvg": 2.64,
+      "ticksPerSecond": 23.89,
+      "snapshotKBps": 293.61,
+      "entities": 504
+    },
+    {
+      "clients": 1024,
+      "tickP50Ms": 14.71,
+      "tickP95Ms": 28.02,
+      "tickP99Ms": 35.7,
+      "tickMaxMs": 53.28,
+      "stepMsAvg": 4.08,
+      "ticksPerSecond": 16.42,
+      "snapshotKBps": 245.11,
+      "entities": 643
+    }
+  ]
+}

@@ -12,13 +12,19 @@
     "dev:client": "npm run dev --workspace client",
     "dev:server": "node --env-file=.env --import tsx --watch server/src/index.ts",
     "start": "node --env-file=.env --import tsx server/src/index.ts",
-    "build": "npm run typecheck && npm run build --workspace client",
+    "build": "npm run build --workspace client",
+    "build:perf": "npm run build --workspace client -- --mode perf",
     "bench:codec": "tsx server/scripts/codec-benchmark.js",
-    "lint": "npm run typecheck && eslint eslint.config.js client/vite.config.js server/test server/scripts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "npm test --workspace server",
-    "typecheck": "tsc --noEmit"
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "perf:record": "node scripts/perf/record-game.mjs",
+    "perf:load": "tsx server/scripts/load-test.ts",
+    "perf:charts": "python3 scripts/perf/charts.py"
   },
   "devDependencies": {
     "@eslint/js": "^9.35.0",

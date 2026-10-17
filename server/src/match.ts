@@ -1,13 +1,46 @@
-import { performance } from "node:perf_hooks";
 import { World, deterministicSeed } from "@starship-arena/shared/sim/world.ts";
-import {
-  sequenceNumber,
-  tickNumber,
-} from "@starship-arena/shared/types.ts";
+import { sequenceNumber, tickNumber } from "@starship-arena/shared/types.ts";
 import type { EntityId, InputPacket } from "@starship-arena/shared/types.ts";
 import type { ServerConfig } from "./config.ts";
 import type { Room } from "./rooms.ts";
-import type { RoomPlayer, SnapshotPayload } from "./types.ts";
+import type { RoomPlayer, SnapshotFrame, SnapshotPayload } from "./types.ts";
+import { encodeSnapshot } from "@starship-arena/shared/codec/binary.ts";
+import type { Snapshot } from "@starship-arena/shared/types.ts";
+
+const NO_SCORES: Readonly<Record<string, number>> = Object.freeze({});
+
+/** Lazily encodes the tick once, no matter how many players receive it. */
+class TickFrame implements SnapshotFrame {
+  readonly #world: World;
+  #binary: ArrayBuffer | null = null;
+  #json: Snapshot | null = null;
+  encodes = 0;
+
+  constructor(world: World) {
+    this.#world = world;
+  }
+  reset(): void {
+    this.#binary = null;
+    this.#json = null;
+  }
+  binary(): ArrayBuffer {
+    if (!this.#binary) {
+      this.encodes += 1;
+      this.#binary = encodeSnapshot({
+        version: 1,
+        tick: this.#world.tick,
+        time: this.#world.time,
+        entities: this.#world.liveEntities(),
+        scores: NO_SCORES,
+      });
+    }
+    return this.#binary;
+  }
+  json(): Snapshot {
+    this.#json ??= this.#world.snapshot();
+    return this.#json;
+  }
+}
 
 interface PlayerMatchState {
   readonly player: RoomPlayer;
@@ -18,7 +51,6 @@ interface PlayerMatchState {
 }
 
 export class Match {
-  readonly #room: Room;
   readonly #config: ServerConfig;
   readonly #world: World;
   readonly #players = new Map<string, PlayerMatchState>();
@@ -32,13 +64,13 @@ export class Match {
   #tickCount = 0;
   #spawnCounter = 0;
   #lastStepDuration = 0;
+  readonly #frame: TickFrame;
   readonly #tickSamples = new Float64Array(300);
   #tickSampleIndex = 0;
   #tickSampleCount = 0;
   readonly seed: number;
 
   constructor(room: Room, config: ServerConfig) {
-    this.#room = room;
     this.#config = config;
     this.#tickMs = 1000 / config.tickRate;
     this.seed = deterministicSeed(room.id, 0x51a7);
@@ -47,8 +79,15 @@ export class Match {
       height: 600,
       seed: this.seed,
       arena: room.arena,
+      broadphase: config.broadphase,
     });
     this.#world.seedArena(room.arena);
+    this.#frame = new TickFrame(this.#world);
+  }
+
+  /** Read-only access for tests and the load-test script. */
+  get world(): World {
+    return this.#world;
   }
 
   get stats() {
@@ -138,8 +177,10 @@ export class Match {
 
   #recordTick(ms: number): void {
     this.#tickSamples[this.#tickSampleIndex] = ms;
-    this.#tickSampleIndex = (this.#tickSampleIndex + 1) % this.#tickSamples.length;
-    if (this.#tickSampleCount < this.#tickSamples.length) this.#tickSampleCount += 1;
+    this.#tickSampleIndex =
+      (this.#tickSampleIndex + 1) % this.#tickSamples.length;
+    if (this.#tickSampleCount < this.#tickSamples.length)
+      this.#tickSampleCount += 1;
   }
 
   start(): void {
@@ -188,15 +229,23 @@ export class Match {
     this.#world.step(1 / this.#config.tickRate, inputs);
     this.#tickCount += 1;
     this.#lastStepDuration = performance.now() - start;
-    const snapshot = this.#world.snapshot();
+    // Lab 7: entities are passed by reference and encoded at most once per
+    // tick (TickFrame); each player only gets its own small header.
+    this.#frame.reset();
+    const entities = this.#world.liveEntities();
+    const serverTime = Date.now();
     for (const state of this.#players.values()) {
       const payload: SnapshotPayload = {
-        ...snapshot,
+        version: 1,
+        tick: this.#world.tick,
+        time: this.#world.time,
+        entities,
+        scores: NO_SCORES,
         lastProcessedSeq: state.lastProcessedSeq,
         score: this.#world.scores.get(state.shipId) ?? 0,
-        serverTime: Date.now(),
+        serverTime,
       };
-      state.player.net.sendSnapshot?.(payload, this.#config);
+      state.player.net.sendSnapshot?.(payload, this.#config, this.#frame);
     }
     // Tick duration = simulation step + snapshot fan-out (what a load test cares about).
     this.#lastTickDuration = performance.now() - start;

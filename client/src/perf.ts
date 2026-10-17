@@ -109,6 +109,9 @@ declare global {
       start(): void;
       stop(): FrameSummary;
       entities(): number;
+      snapshotMs(): { totalMs: number; count: number };
+      /** Test hook (Playwright): ships in the last rendered frame. */
+      ships(): Array<{ id: number; x: number; y: number; local: boolean }>;
     };
   }
 }

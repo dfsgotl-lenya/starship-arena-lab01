@@ -1,3 +1,4 @@
+import { entityId } from "../types.ts";
 import type {
   AsteroidEntity,
   BulletEntity,
@@ -32,27 +33,58 @@ export function createShip(id: EntityId, x: number, y: number): ShipEntity {
   };
 }
 
+export type Muzzle = Pick<
+  ShipEntity,
+  "x" | "y" | "vx" | "vy" | "angle" | "radius"
+>;
+
 export function createBullet(
   id: EntityId,
   ownerId: EntityId,
-  ship: Pick<ShipEntity, "x" | "y" | "vx" | "vy" | "angle" | "radius">,
+  ship: Muzzle,
 ): BulletEntity {
-  const muzzleX = ship.x + Math.cos(ship.angle) * (ship.radius + 11);
-  const muzzleY = ship.y + Math.sin(ship.angle) * (ship.radius + 11);
+  return initBullet(blankBullet(), id, ownerId, ship);
+}
+
+/** A bullet with every field present, so pooled bullets share one hidden class. */
+export function blankBullet(): BulletEntity {
   return {
-    id,
+    id: entityId(0),
     kind: "bullet",
-    ownerId,
-    x: muzzleX,
-    y: muzzleY,
-    vx: ship.vx + Math.cos(ship.angle) * 520,
-    vy: ship.vy + Math.sin(ship.angle) * 520,
-    angle: ship.angle,
+    ownerId: entityId(0),
+    x: 0,
+    y: 0,
+    vx: 0,
+    vy: 0,
+    angle: 0,
     radius: 5,
-    ttl: 1.5,
+    ttl: 0,
     homing: false,
-    alive: true,
+    alive: false,
   };
+}
+
+/** (Re)initialises a bullet in place — used with the bullet pool. */
+export function initBullet<T extends BulletEntity>(
+  bullet: T,
+  id: EntityId,
+  ownerId: EntityId,
+  ship: Muzzle,
+): T {
+  const cos = Math.cos(ship.angle);
+  const sin = Math.sin(ship.angle);
+  bullet.id = id;
+  bullet.ownerId = ownerId;
+  bullet.x = ship.x + cos * (ship.radius + 11);
+  bullet.y = ship.y + sin * (ship.radius + 11);
+  bullet.vx = ship.vx + cos * 520;
+  bullet.vy = ship.vy + sin * 520;
+  bullet.angle = ship.angle;
+  bullet.radius = 5;
+  bullet.ttl = 1.5;
+  bullet.homing = false;
+  bullet.alive = true;
+  return bullet;
 }
 
 export function createAsteroid(

@@ -1,51 +1,74 @@
 import eslint from "@eslint/js";
+import tseslint from "typescript-eslint";
 
-export default [
-  { ignores: ["client/dist/**", "node_modules/**", "logs/**"] },
+const nodeGlobals = {
+  console: "readonly",
+  process: "readonly",
+  Buffer: "readonly",
+  URL: "readonly",
+  fetch: "readonly",
+  performance: "readonly",
+  setInterval: "readonly",
+  setTimeout: "readonly",
+  setImmediate: "readonly",
+  clearInterval: "readonly",
+  clearTimeout: "readonly",
+};
+
+export default tseslint.config(
+  {
+    ignores: [
+      "client/dist/**",
+      "dist/**",
+      "node_modules/**",
+      "logs/**",
+      "coverage/**",
+      "perf/**",
+      "playwright-report/**",
+      "test-results/**",
+      "src/**",
+      "docs/**",
+    ],
+  },
   eslint.configs.recommended,
   {
-    files: ["client/src/**/*.js"],
+    files: ["**/*.ts"],
+    extends: [tseslint.configs.recommended],
     languageOptions: {
-      ecmaVersion: "latest",
-      sourceType: "module",
-      globals: {
-        window: "readonly",
-        EventTarget: "readonly",
-        CustomEvent: "readonly",
-        AbortController: "readonly",
-        AbortSignal: "readonly",
-        AudioContext: "readonly",
-        OfflineAudioContext: "readonly",
-        document: "readonly",
-        performance: "readonly",
-        requestAnimationFrame: "readonly",
-        cancelAnimationFrame: "readonly",
-        ResizeObserver: "readonly",
-        TextEncoder: "readonly",
-        TextDecoder: "readonly",
-        fetch: "readonly",
-        WebSocket: "readonly",
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
       },
     },
-    rules: { "no-unused-vars": ["error", { argsIgnorePattern: "^_" }] },
+    rules: {
+      // Lab 7: a forgotten promise on the server is an unhandled rejection
+      // that can crash the process (Reflection Q8).
+      "@typescript-eslint/no-floating-promises": "error",
+      "@typescript-eslint/no-misused-promises": "error",
+      "@typescript-eslint/await-thenable": "error",
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+        },
+      ],
+    },
   },
   {
-    files: ["server/**/*.js"],
+    files: ["**/test/**/*.ts", "e2e/**/*.ts"],
+    rules: {
+      "@typescript-eslint/no-non-null-assertion": "off",
+    },
+  },
+  {
+    files: ["**/*.js", "**/*.mjs"],
     languageOptions: {
       ecmaVersion: "latest",
       sourceType: "module",
-      globals: {
-        console: "readonly",
-        process: "readonly",
-        Buffer: "readonly",
-        URL: "readonly",
-        setInterval: "readonly",
-        setTimeout: "readonly",
-        setImmediate: "readonly",
-        clearInterval: "readonly",
-        clearTimeout: "readonly",
-      },
+      globals: { ...nodeGlobals, window: "readonly" },
     },
     rules: { "no-unused-vars": ["error", { argsIgnorePattern: "^_" }] },
   },
-];
+);
